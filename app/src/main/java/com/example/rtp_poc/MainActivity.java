@@ -122,9 +122,10 @@ public class MainActivity extends AppCompatActivity {
         DataPacket dp = new DataPacket();
         dp.setPayloadType(1);
         int seq = 1;
+        int offset = 0;
 
 
-        while (audioRecord.read(buffer, 0, bufferSize) > 0) {
+        while ((offset += audioRecord.read(buffer, offset, bufferSize)) > 0) {
 
             dp.setSequenceNumber(seq++);
             dp.setData(buffer);
