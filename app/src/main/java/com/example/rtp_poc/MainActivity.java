@@ -12,6 +12,7 @@ import android.net.rtp.AudioGroup;
 import android.net.rtp.AudioStream;
 import android.net.rtp.RtpStream;
 import android.net.wifi.WifiManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.text.format.Formatter;
@@ -30,6 +31,9 @@ import com.biasedbit.efflux.session.RtpSession;
 import com.biasedbit.efflux.session.RtpSessionDataListener;
 import com.biasedbit.efflux.session.SingleParticipantSession;
 
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.UnknownHostException;
@@ -60,7 +64,7 @@ public class MainActivity extends AppCompatActivity {
         bufferSize = AudioRecord.getMinBufferSize(mSampleRate,
                 mChannelConfig,
                 mAudioFormat);
-        bufferSize = 320;
+//        bufferSize = 960;
         // 实例化播放音频对象
         audioRecord = new AudioRecord(mAudioSource, mSampleRate,
                 mChannelConfig,
@@ -104,35 +108,72 @@ public class MainActivity extends AppCompatActivity {
     private void send() {
         String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
         String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
+        new LongOperation().execute(remoteAddress, remotePort);
 
-        RtpParticipant localP = RtpParticipant.createReceiver("locahost", 11111, 11112);
-        RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
-        session = new SingleParticipantSession("id", 1, localP, remoteP);
-        session.addDataListener(new RtpSessionDataListener() {
-            @Override
-            public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-                Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
+
+
+
+//        while ((offset += audioRecord.read(buffer, offset, bufferSize)) > 0) {
+//
+//            dp.setSequenceNumber(seq++);
+//            dp.setData(buffer);
+//            session.sendDataPacket(dp);
+//
+//        }
+
+    }
+
+    private class LongOperation extends AsyncTask<String, Void, String> {
+
+        @Override
+        protected String doInBackground(String... params)  {
+            RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 11111, 11112);
+            RtpParticipant remoteP = RtpParticipant.createReceiver("10.0.2.3", 50559 , 21112);
+
+            session = new SingleParticipantSession("id", 1, localP, remoteP);
+            session.addDataListener(new RtpSessionDataListener() {
+                @Override
+                public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
+                    Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
+                }
+            });
+            session.init();
+
+            try {
+                DatagramSocket socket = new DatagramSocket();
+                final InetAddress destination = InetAddress.getByName("10.0.2.3");
+                byte[] buffer = new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5};
+                DatagramPacket packet =  new DatagramPacket (buffer,buffer.length,destination,50559);
+                socket.send(packet);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        });
-        session.init();
-
-        audioRecord.startRecording();
-        byte[] buffer = new byte[bufferSize];
-        DataPacket dp = new DataPacket();
-        dp.setPayloadType(1);
-        int seq = 1;
-        int offset = 0;
 
 
-        while ((offset += audioRecord.read(buffer, offset, bufferSize)) > 0) {
+//        audioRecord.startRecording();
+//            byte[] buffer = new byte[bufferSize];
+            DataPacket dp = new DataPacket();
+            dp.setPayloadType(1);
+            int seq = 1;
+            int offset = 0;
 
             dp.setSequenceNumber(seq++);
-            dp.setData(buffer);
-            session.sendDataPacket(dp);
+//            dp.setData();
+//            session.sendDataPacket(dp);
+            return "Executed";
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
 
         }
 
+        @Override
+        protected void onPreExecute() {}
+
+        @Override
+        protected void onProgressUpdate(Void... values) {}
     }
 
     public int getValidSampleRates() {
