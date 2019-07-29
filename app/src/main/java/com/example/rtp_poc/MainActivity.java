@@ -115,8 +115,7 @@ public class MainActivity extends AppCompatActivity {
                 Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
             }
         });
-
-
+        session.init();
 
         audioRecord.startRecording();
         byte[] buffer = new byte[bufferSize];
