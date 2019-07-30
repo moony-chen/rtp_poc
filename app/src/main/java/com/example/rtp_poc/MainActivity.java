@@ -31,13 +31,39 @@ import com.biasedbit.efflux.session.RtpSession;
 import com.biasedbit.efflux.session.RtpSessionDataListener;
 import com.biasedbit.efflux.session.SingleParticipantSession;
 
+import org.jboss.netty.bootstrap.Bootstrap;
+import org.jboss.netty.bootstrap.ClientBootstrap;
+import org.jboss.netty.bootstrap.ConnectionlessBootstrap;
+import org.jboss.netty.buffer.ByteBufferBackedChannelBuffer;
+import org.jboss.netty.channel.Channel;
+import org.jboss.netty.channel.ChannelFuture;
+import org.jboss.netty.channel.ChannelPipeline;
+import org.jboss.netty.channel.ChannelPipelineFactory;
+import org.jboss.netty.channel.Channels;
+import org.jboss.netty.channel.DefaultChannelPipeline;
+import org.jboss.netty.channel.group.ChannelGroup;
+import org.jboss.netty.channel.group.DefaultChannelGroup;
+import org.jboss.netty.channel.socket.DefaultDatagramChannelConfig;
+import org.jboss.netty.channel.socket.nio.NioDatagramChannel;
+import org.jboss.netty.channel.socket.nio.NioDatagramChannelFactory;
+import org.jboss.netty.channel.socket.oio.OioDatagramChannelFactory;
+import org.jboss.netty.handler.codec.rtsp.RtspMessageEncoder;
+import org.jboss.netty.handler.codec.rtsp.RtspRequestEncoder;
+import org.jboss.netty.handler.codec.string.StringDecoder;
+import org.jboss.netty.handler.codec.string.StringEncoder;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.util.Enumeration;
+
+
+import java.net.InetSocketAddress;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -126,39 +152,67 @@ public class MainActivity extends AppCompatActivity {
 
     private class LongOperation extends AsyncTask<String, Void, String> {
 
+        DatagramSocket socket;
+        private final ChannelGroup group = new DefaultChannelGroup();
+
         @Override
         protected String doInBackground(String... params)  {
             RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 11111, 11112);
             RtpParticipant remoteP = RtpParticipant.createReceiver("10.0.2.3", 50559 , 21112);
 
-            session = new SingleParticipantSession("id", 1, localP, remoteP);
-            session.addDataListener(new RtpSessionDataListener() {
-                @Override
-                public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-                    Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
-                }
-            });
-            session.init();
+//            session = new SingleParticipantSession("id", 1, localP, remoteP);
+//            session.addDataListener(new RtpSessionDataListener() {
+//                @Override
+//                public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
+//                    Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
+//                }
+//            });
+//            session.init();
 
             try {
-                DatagramSocket socket = new DatagramSocket();
+                 socket = new DatagramSocket();
                 final InetAddress destination = InetAddress.getByName("10.0.2.3");
                 byte[] buffer = new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5};
-                DatagramPacket packet =  new DatagramPacket (buffer,buffer.length,destination,50559);
-                socket.send(packet);
+//                DatagramPacket packet =  new DatagramPacket (buffer,buffer.length,destination,50559);
+//                socket.send(packet);
+
+                SocketAddress remote = new InetSocketAddress("10.0.2.3", 50559);
+
+
+                ConnectionlessBootstrap bootStrap = new ConnectionlessBootstrap(new NioDatagramChannelFactory());
+
+                bootStrap.setPipelineFactory(new ChannelPipelineFactory() {
+
+                    @Override
+                    public ChannelPipeline getPipeline() throws Exception {
+                        ChannelPipeline pipe= new DefaultChannelPipeline();
+                        pipe.addLast("decoder", new StringDecoder());
+                        pipe.addLast("encoder",new StringEncoder());
+                        return pipe;
+                    }
+                });
+
+                Channel c = bootStrap.bind(new InetSocketAddress("127.0.0.1", 11111));
+
+
+                c.write("test", remote);
+
+
+
+
+
             } catch (IOException e) {
                 e.printStackTrace();
             }
 
-
 //        audioRecord.startRecording();
 //            byte[] buffer = new byte[bufferSize];
-            DataPacket dp = new DataPacket();
-            dp.setPayloadType(1);
-            int seq = 1;
-            int offset = 0;
-
-            dp.setSequenceNumber(seq++);
+//            DataPacket dp = new DataPacket();
+//            dp.setPayloadType(1);
+//            int seq = 1;
+//            int offset = 0;
+//
+//            dp.setSequenceNumber(seq++);
 //            dp.setData();
 //            session.sendDataPacket(dp);
             return "Executed";
@@ -166,7 +220,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         protected void onPostExecute(String result) {
-
+            socket.close();
         }
 
         @Override
