@@ -19,22 +19,19 @@ package com.biasedbit.efflux.network;
 import com.biasedbit.efflux.logging.Logger;
 import com.biasedbit.efflux.packet.CompoundControlPacket;
 import com.biasedbit.efflux.packet.ControlPacket;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.ChannelDownstreamHandler;
-import org.jboss.netty.channel.ChannelEvent;
-import org.jboss.netty.channel.ChannelHandler;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.MessageEvent;
-
 import java.util.List;
+
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelOutboundHandler;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPromise;
 
 /**
  * @author <a href="http://bruno.biasedbit.com/">Bruno de Carvalho</a>
  */
 @ChannelHandler.Sharable
-public class ControlPacketEncoder implements ChannelDownstreamHandler {
+public class ControlPacketEncoder extends ChannelOutboundHandlerAdapter {
 
     // constants ------------------------------------------------------------------------------------------------------
 
@@ -52,6 +49,12 @@ public class ControlPacketEncoder implements ChannelDownstreamHandler {
     }
 
     // ChannelDownstreamHandler ---------------------------------------------------------------------------------------
+
+
+    @Override
+    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+
+    }
 
     @Override
     public void handleDownstream(ChannelHandlerContext ctx, ChannelEvent evt) throws Exception {

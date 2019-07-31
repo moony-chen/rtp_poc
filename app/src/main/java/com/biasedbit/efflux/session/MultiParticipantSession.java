@@ -20,8 +20,8 @@ import com.biasedbit.efflux.participant.DefaultParticipantDatabase;
 import com.biasedbit.efflux.participant.ParticipantDatabase;
 import com.biasedbit.efflux.participant.ParticipantEventListener;
 import com.biasedbit.efflux.participant.RtpParticipant;
-import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
-import org.jboss.netty.util.HashedWheelTimer;
+
+import io.netty.util.HashedWheelTimer;
 
 /**
  * A regular RTP session, as described in RFC3550.

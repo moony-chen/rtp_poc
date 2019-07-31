@@ -16,8 +16,9 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,7 +45,7 @@ public class SdesChunk {
 
     // public static methods ------------------------------------------------------------------------------------------
 
-    public static SdesChunk decode(ChannelBuffer buffer) {
+    public static SdesChunk decode(ByteBuf buffer) {
         SdesChunk chunk = new SdesChunk();
         chunk.ssrc = buffer.readUnsignedInt();
 
@@ -72,11 +73,11 @@ public class SdesChunk {
         }
     }
 
-    public static ChannelBuffer encode(SdesChunk chunk) {
-        ChannelBuffer buffer;
+    public static ByteBuf encode(SdesChunk chunk) {
+        ByteBuf buffer;
         if (chunk.items == null) {
             // Allocate 8 bytes: 4 for ssrc, 1 for null item and other 3 null octets for 32 bit alignment
-            buffer = ChannelBuffers.buffer(8);
+            buffer = Unpooled.buffer(8);
             buffer.writeInt((int) chunk.ssrc); // ssrc
             buffer.writeInt(0); // 4 null octets (1 for null item and 3 for 32bit alignment)
             return buffer;
@@ -84,9 +85,9 @@ public class SdesChunk {
             // Start with SSRC
             int size = 4;
             // Add the length of each item
-            List<ChannelBuffer> encodedChunkItems = new ArrayList<ChannelBuffer>(chunk.items.size());
+            List<ByteBuf> encodedChunkItems = new ArrayList<ByteBuf>(chunk.items.size());
             for (SdesChunkItem item : chunk.items) {
-                ChannelBuffer encodedChunk = item.encode();
+                ByteBuf encodedChunk = item.encode();
                 encodedChunkItems.add(encodedChunk);
                 size += encodedChunk.readableBytes();
             }
@@ -100,9 +101,9 @@ public class SdesChunk {
             size += padding;
 
             // Write the buffer contents: SSRC, chunks, null item and padding
-            buffer = ChannelBuffers.buffer(size);
+            buffer = Unpooled.buffer(size);
             buffer.writeInt((int) chunk.ssrc);
-            for (ChannelBuffer encodedChunk : encodedChunkItems) {
+            for (ByteBuf encodedChunk : encodedChunkItems) {
                 buffer.writeBytes(encodedChunk);
             }
             buffer.writeByte(0x00);
@@ -116,7 +117,7 @@ public class SdesChunk {
 
     // public methods -------------------------------------------------------------------------------------------------
 
-    public ChannelBuffer encode() {
+    public ByteBuf encode() {
         return encode(this);
     }
 

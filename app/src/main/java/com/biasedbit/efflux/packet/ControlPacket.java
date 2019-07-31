@@ -16,7 +16,8 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * @author <a href="http://bruno.biasedbit.com/">Bruno de Carvalho</a>
@@ -37,7 +38,7 @@ public abstract class ControlPacket {
 
     // public methods -------------------------------------------------------------------------------------------------
 
-    public static ControlPacket decode(ChannelBuffer buffer) {
+    public static ControlPacket decode(ByteBuf buffer) {
         if ((buffer.readableBytes() % 4) > 0) {
             throw new IllegalArgumentException("Invalid RTCP packet length: expecting multiple of 4 and got " +
                                                buffer.readableBytes());
@@ -77,9 +78,9 @@ public abstract class ControlPacket {
         }
     }
 
-    public abstract ChannelBuffer encode(int currentCompoundLength, int fixedBlockSize);
+    public abstract ByteBuf encode(int currentCompoundLength, int fixedBlockSize);
 
-    public abstract ChannelBuffer encode();
+    public abstract ByteBuf encode();
 
     // getters & setters ----------------------------------------------------------------------------------------------
 

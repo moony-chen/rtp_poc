@@ -17,17 +17,19 @@
 package com.biasedbit.efflux.network;
 
 import com.biasedbit.efflux.packet.DataPacket;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelHandler;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.handler.codec.oneone.OneToOneEncoder;
+
+import java.util.List;
+
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.MessageToMessageEncoder;
 
 /**
  * @author <a href="http://bruno.biasedbit.com/">Bruno de Carvalho</a>
  */
 @ChannelHandler.Sharable
-public class DataPacketEncoder extends OneToOneEncoder {
+public class DataPacketEncoder extends MessageToMessageEncoder {
 
     // constructors ---------------------------------------------------------------------------------------------------
 
@@ -42,18 +44,32 @@ public class DataPacketEncoder extends OneToOneEncoder {
 
     // OneToOneEncoder ------------------------------------------------------------------------------------------------
 
+
     @Override
-    protected Object encode(ChannelHandlerContext ctx, Channel channel, Object msg) throws Exception {
+    protected void encode(ChannelHandlerContext ctx, Object msg, List out) throws Exception {
         if (!(msg instanceof DataPacket)) {
-            return ChannelBuffers.EMPTY_BUFFER;
+            out.add( Unpooled.EMPTY_BUFFER);
         }
 
         DataPacket packet = (DataPacket) msg;
         if (packet.getDataSize() == 0) {
-            return ChannelBuffers.EMPTY_BUFFER;
+            out.add( Unpooled.EMPTY_BUFFER);
         }
-        return packet.encode();
+        out.add( packet.encode());
     }
+
+//    @Override
+//    protected Object encode(ChannelHandlerContext ctx, Channel channel, Object msg) throws Exception {
+//        if (!(msg instanceof DataPacket)) {
+//            return Unpooled.EMPTY_BUFFER;
+//        }
+//
+//        DataPacket packet = (DataPacket) msg;
+//        if (packet.getDataSize() == 0) {
+//            return Unpooled.EMPTY_BUFFER;
+//        }
+//        return packet.encode();
+//    }
 
     // private classes ------------------------------------------------------------------------------------------------
 

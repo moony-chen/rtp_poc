@@ -7,7 +7,6 @@ import com.biasedbit.efflux.participant.RtpParticipantInfo;
 import com.biasedbit.efflux.session.RtpSession;
 import com.biasedbit.efflux.session.RtpSessionDataListener;
 import com.biasedbit.efflux.session.SingleParticipantSession;
-import org.jboss.netty.util.Timeout;
 
 /**
  * Created by fangchen on 7/28/19.

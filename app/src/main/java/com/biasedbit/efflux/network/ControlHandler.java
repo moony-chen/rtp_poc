@@ -18,17 +18,15 @@ package com.biasedbit.efflux.network;
 
 import com.biasedbit.efflux.logging.Logger;
 import com.biasedbit.efflux.packet.CompoundControlPacket;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ExceptionEvent;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
 
 import java.util.concurrent.atomic.AtomicInteger;
+
+import io.netty.channel.SimpleChannelInboundHandler;
 
 /**
  * @author <a href="http://bruno.biasedbit.com/">Bruno de Carvalho</a>
  */
-public class ControlHandler extends SimpleChannelUpstreamHandler {
+public class ControlHandler extends SimpleChannelInboundHandler<CompoundControlPacket> {
 
     // constants ------------------------------------------------------------------------------------------------------
 

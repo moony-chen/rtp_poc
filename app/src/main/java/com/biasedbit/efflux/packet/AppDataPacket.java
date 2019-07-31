@@ -16,7 +16,8 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * @author <a:mailto="bruno.carvalho@wit-software.com" />Bruno de Carvalho</a>
@@ -31,19 +32,19 @@ public class AppDataPacket extends ControlPacket {
 
     // public static methods ------------------------------------------------------------------------------------------
 
-    public static ChannelBuffer encode(int currentCompoundLength, int fixedBlockSize, AppDataPacket packet) {
+    public static ByteBuf encode(int currentCompoundLength, int fixedBlockSize, AppDataPacket packet) {
         return null;
     }
 
     // ControlPacket --------------------------------------------------------------------------------------------------
 
     @Override
-    public ChannelBuffer encode(int currentCompoundLength, int fixedBlockSize) {
+    public ByteBuf encode(int currentCompoundLength, int fixedBlockSize) {
         return encode(currentCompoundLength, fixedBlockSize, this);
     }
 
     @Override
-    public ChannelBuffer encode() {
+    public ByteBuf encode() {
         return encode(0, 0, this);
     }
 }

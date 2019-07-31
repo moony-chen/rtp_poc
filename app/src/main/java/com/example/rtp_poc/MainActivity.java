@@ -23,34 +23,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.biasedbit.efflux.logging.Logger;
-import com.biasedbit.efflux.packet.DataPacket;
-import com.biasedbit.efflux.participant.RtpParticipant;
-import com.biasedbit.efflux.participant.RtpParticipantInfo;
-import com.biasedbit.efflux.session.RtpSession;
-import com.biasedbit.efflux.session.RtpSessionDataListener;
-import com.biasedbit.efflux.session.SingleParticipantSession;
 
-import org.jboss.netty.bootstrap.Bootstrap;
-import org.jboss.netty.bootstrap.ClientBootstrap;
-import org.jboss.netty.bootstrap.ConnectionlessBootstrap;
-import org.jboss.netty.buffer.ByteBufferBackedChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.DefaultChannelPipeline;
-import org.jboss.netty.channel.group.ChannelGroup;
-import org.jboss.netty.channel.group.DefaultChannelGroup;
-import org.jboss.netty.channel.socket.DefaultDatagramChannelConfig;
-import org.jboss.netty.channel.socket.nio.NioDatagramChannel;
-import org.jboss.netty.channel.socket.nio.NioDatagramChannelFactory;
-import org.jboss.netty.channel.socket.oio.OioDatagramChannelFactory;
-import org.jboss.netty.handler.codec.rtsp.RtspMessageEncoder;
-import org.jboss.netty.handler.codec.rtsp.RtspRequestEncoder;
-import org.jboss.netty.handler.codec.string.StringDecoder;
-import org.jboss.netty.handler.codec.string.StringEncoder;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -64,6 +37,19 @@ import java.util.Enumeration;
 
 
 import java.net.InetSocketAddress;
+
+import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.util.CharsetUtil;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -129,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private  SingleParticipantSession session;
+//    private  SingleParticipantSession session;
 
     private void send() {
         String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
@@ -150,15 +136,28 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private class ClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+//            super.channelActive(ctx);
+            ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
+        }
+
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+            Log.d(TAG, msg.toString(CharsetUtil.UTF_8));
+        }
+    }
+
     private class LongOperation extends AsyncTask<String, Void, String> {
 
         DatagramSocket socket;
-        private final ChannelGroup group = new DefaultChannelGroup();
+//        private final ChannelGroup group = new DefaultChannelGroup();
 
         @Override
         protected String doInBackground(String... params)  {
-            RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 11111, 11112);
-            RtpParticipant remoteP = RtpParticipant.createReceiver("10.0.2.3", 50559 , 21112);
+//            RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 11111, 11112);
+//            RtpParticipant remoteP = RtpParticipant.createReceiver("10.0.2.3", 50559 , 21112);
 
 //            session = new SingleParticipantSession("id", 1, localP, remoteP);
 //            session.addDataListener(new RtpSessionDataListener() {
@@ -168,6 +167,7 @@ public class MainActivity extends AppCompatActivity {
 //                }
 //            });
 //            session.init();
+            EventLoopGroup group = new NioEventLoopGroup();
 
             try {
                  socket = new DatagramSocket();
@@ -179,29 +179,22 @@ public class MainActivity extends AppCompatActivity {
                 SocketAddress remote = new InetSocketAddress("10.0.2.3", 50559);
 
 
-                ConnectionlessBootstrap bootStrap = new ConnectionlessBootstrap(new NioDatagramChannelFactory());
+                Bootstrap b = new Bootstrap();
+                b.group(group)
+                        .channel(NioDatagramChannel.class)
+                        .remoteAddress(remote)
+                        .handler(new ChannelInitializer<DatagramChannel>() {
 
-                bootStrap.setPipelineFactory(new ChannelPipelineFactory() {
-
-                    @Override
-                    public ChannelPipeline getPipeline() throws Exception {
-                        ChannelPipeline pipe= new DefaultChannelPipeline();
-                        pipe.addLast("decoder", new StringDecoder());
-                        pipe.addLast("encoder",new StringEncoder());
-                        return pipe;
-                    }
-                });
-
-                Channel c = bootStrap.bind(new InetSocketAddress("127.0.0.1", 11111));
-
-
-                c.write("test", remote);
+                            @Override
+                            protected void initChannel(DatagramChannel ch) throws Exception {
+                                ch.pipeline().addLast(new ClientHandler());
+                            }
+                        });
+                ChannelFuture f = b.connect().sync();
+                f.channel().closeFuture().sync();
 
 
-
-
-
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
 
@@ -243,7 +236,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void stop() {
         audioRecord.stop();
-        session.terminate();
+//        session.terminate();
     }
 
     private byte[] getLocalIPAddress() {
