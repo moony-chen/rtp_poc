@@ -16,9 +16,10 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.util.CharsetUtil;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.util.CharsetUtil;
 
 /**
  * @author <a:mailto="bruno.carvalho@wit-software.com" />Bruno de Carvalho</a>
@@ -39,7 +40,7 @@ public class SdesChunkPrivItem extends SdesChunkItem {
     // public methods -------------------------------------------------------------------------------------------------
 
     @Override
-    public ChannelBuffer encode() {
+    public ByteBuf encode() {
         byte[] prefixBytes;
         if (this.prefix != null) {
             // RFC section 6.5 mandates that this must be UTF8
@@ -64,7 +65,7 @@ public class SdesChunkPrivItem extends SdesChunkItem {
         }
 
         // Type (1b), total item length (1b), prefix length (1b), prefix (xb), text (xb)
-        ChannelBuffer buffer = ChannelBuffers.buffer(2 + 1 + prefixBytes.length + valueBytes.length);
+        ByteBuf buffer = Unpooled.buffer(2 + 1 + prefixBytes.length + valueBytes.length);
         buffer.writeByte(this.type.getByte());
         buffer.writeByte(1 + prefixBytes.length + valueBytes.length);
         buffer.writeByte(prefixBytes.length);

@@ -1,8 +1,12 @@
 package com.example.rtp_poc;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -12,6 +16,7 @@ import android.net.rtp.AudioGroup;
 import android.net.rtp.AudioStream;
 import android.net.rtp.RtpStream;
 import android.net.wifi.WifiManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.text.format.Formatter;
@@ -22,20 +27,48 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+
 import com.biasedbit.efflux.logging.Logger;
 import com.biasedbit.efflux.packet.DataPacket;
 import com.biasedbit.efflux.participant.RtpParticipant;
 import com.biasedbit.efflux.participant.RtpParticipantInfo;
+import com.biasedbit.efflux.session.RtpDatasource;
 import com.biasedbit.efflux.session.RtpSession;
 import com.biasedbit.efflux.session.RtpSessionDataListener;
 import com.biasedbit.efflux.session.SingleParticipantSession;
 
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.util.Enumeration;
 
+
+import java.net.InetSocketAddress;
+
+import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.util.CharsetUtil;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
+import io.reactivex.subjects.PublishSubject;
+
 public class MainActivity extends AppCompatActivity {
+
+    private static final int MY_PERMISSIONS_REQUEST_RECORD_AUDIO = 100;
 
     private static final String TAG = "MainActivity";
     //指定音频源 这个和MediaRecorder是相同的 MediaRecorder.AudioSource.MIC指的是麦克风
@@ -56,11 +89,30 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted
+
+                // No explanation needed; request the permission
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.RECORD_AUDIO},
+                        MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
+                return;
+        }
+
+        startAudio();
+
+
+    }
+
+//    private  SingleParticipantSession session;
+
+    private void startAudio() {
         // AudioRecord 得到录制最小缓冲区的大小
         bufferSize = AudioRecord.getMinBufferSize(mSampleRate,
                 mChannelConfig,
                 mAudioFormat);
-        bufferSize = 320;
+//        bufferSize = 960;
         // 实例化播放音频对象
         audioRecord = new AudioRecord(mAudioSource, mSampleRate,
                 mChannelConfig,
@@ -73,6 +125,9 @@ public class MainActivity extends AppCompatActivity {
             AudioManager audio =  (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
 
+
+
+
 //            InetAddress ia = InetAddress.getByAddress(getLocalIPAddress());
 
 //            ((TextView)findViewById(R.id.lblLocalPort)).setText(String.valueOf(localPort));
@@ -80,7 +135,14 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onClick(View v) {
-                    send();
+                    initRtc(MainActivity.this.audioSource);
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            send();
+                        }
+                    }, "AudioRecorder Thread").start();
+
 
                 }
             });
@@ -99,39 +161,76 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private  SingleParticipantSession session;
+    private PublishSubject<byte[]> audioSource = PublishSubject.create();
+
+    private void initRtc(final Observable<byte[]> audioSource) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
+                String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
+
+                RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 12345, 11113);
+                RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
+
+                RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
+                session.addDataListener(new RtpSessionDataListener() {
+                    @Override
+                    public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
+                        Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
+                    }
+                });
+                try {
+                    session.init(audioSource);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }, "RTC thread").start();
+
+
+    }
+
 
     private void send() {
-        String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
-        String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
 
-        RtpParticipant localP = RtpParticipant.createReceiver("locahost", 11111, 11112);
-        RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
-        session = new SingleParticipantSession("id", 1, localP, remoteP);
-        session.addDataListener(new RtpSessionDataListener() {
-            @Override
-            public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-                Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
-            }
-        });
-        session.init();
-
+//        this.audioSource.onNext(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
         audioRecord.startRecording();
         byte[] buffer = new byte[bufferSize];
-        DataPacket dp = new DataPacket();
-        dp.setPayloadType(1);
-        int seq = 1;
-        int offset = 0;
 
 
-        while ((offset += audioRecord.read(buffer, offset, bufferSize)) > 0) {
+        while (audioRecord.read(buffer, 0, bufferSize) > 0) {
 
-            dp.setSequenceNumber(seq++);
-            dp.setData(buffer);
-            session.sendDataPacket(dp);
+            this.audioSource.onNext(buffer);
 
         }
+//
+//        mStreamAudioRecorder.start(new StreamAudioRecorder.AudioDataCallback() {
+//            @Override
+//            public void onAudioData(byte[] data, int size) {
+//                if (mFileOutputStream != null) {
+//                    try {
+//                        mFileOutputStream.write(data, 0, size);
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            }
+//
+//            @Override
+//            public void onError() {
+//                mBtnStart.post(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        Toast.makeText(getApplicationContext(), "Record fail",
+//                                Toast.LENGTH_SHORT).show();
+//                        mBtnStart.setText("Start");
+//                        mIsRecording = false;
+//                    }
+//                });
+//            }
+//        });
 
     }
 
@@ -148,7 +247,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void stop() {
         audioRecord.stop();
-        session.terminate();
+//        audioRecord.release();
+//        session.terminate();
     }
 
     private byte[] getLocalIPAddress() {
@@ -178,5 +278,28 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return bytes;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String[] permissions, int[] grantResults) {
+        switch (requestCode) {
+            case MY_PERMISSIONS_REQUEST_RECORD_AUDIO: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // permission was granted, yay! Do the
+                    // contacts-related task you need to do.
+                    startAudio();
+                } else {
+                    // permission denied, boo! Disable the
+                    // functionality that depends on this permission.
+                }
+                return;
+            }
+
+            // other 'case' lines to check for other
+            // permissions this app might request.
+        }
     }
 }

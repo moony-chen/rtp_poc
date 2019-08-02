@@ -16,8 +16,8 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.util.CharsetUtil;
+import io.netty.buffer.ByteBuf;
+import io.netty.util.CharsetUtil;
 
 /**
  * @author <a:mailto="bruno.carvalho@wit-software.com" />Bruno de Carvalho</a>
@@ -66,7 +66,7 @@ public class SdesChunkItems {
         return new SdesChunkPrivItem(prefix, value);
     }
 
-    public static SdesChunkItem decode(ChannelBuffer buffer) {
+    public static SdesChunkItem decode(ByteBuf buffer) {
         SdesChunkItem.Type type = SdesChunkItem.Type.fromByte(buffer.readByte());
         switch (type) {
             case NULL:
@@ -98,7 +98,7 @@ public class SdesChunkItems {
         }
     }
 
-    public static ChannelBuffer encode(SdesChunkItem item) {
+    public static ByteBuf encode(SdesChunkItem item) {
         return item.encode();
     }
 }

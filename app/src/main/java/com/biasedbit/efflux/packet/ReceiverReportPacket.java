@@ -16,8 +16,9 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 /**
  * @author <a:mailto="bruno.carvalho@wit-software.com" />Bruno de Carvalho</a>
@@ -32,7 +33,7 @@ public class ReceiverReportPacket extends AbstractReportPacket {
 
     // public static methods ------------------------------------------------------------------------------------------
 
-    public static ReceiverReportPacket decode(ChannelBuffer buffer, boolean hasPadding, byte innerBlocks, int length) {
+    public static ReceiverReportPacket decode(ByteBuf buffer, boolean hasPadding, byte innerBlocks, int length) {
         ReceiverReportPacket packet = new ReceiverReportPacket();
 
         packet.setSenderSsrc(buffer.readUnsignedInt());
@@ -55,7 +56,7 @@ public class ReceiverReportPacket extends AbstractReportPacket {
         return packet;
     }
 
-    public static ChannelBuffer encode(int currentCompoundLength, int fixedBlockSize, ReceiverReportPacket packet) {
+    public static ByteBuf encode(int currentCompoundLength, int fixedBlockSize, ReceiverReportPacket packet) {
         if ((currentCompoundLength < 0) || ((currentCompoundLength % 4) > 0)) {
             throw new IllegalArgumentException("Current compound length must be a non-negative multiple of 4");
         }
@@ -65,7 +66,7 @@ public class ReceiverReportPacket extends AbstractReportPacket {
 
         // Common header + sender ssrc
         int size = 4 + 4;
-        ChannelBuffer buffer;
+        ByteBuf buffer;
         if (packet.receptionReports != null) {
             size += packet.receptionReports.size() * 24;
         }
@@ -85,7 +86,7 @@ public class ReceiverReportPacket extends AbstractReportPacket {
         size += padding;
 
         // Allocate the buffer and write contents
-        buffer = ChannelBuffers.buffer(size);
+        buffer = Unpooled.buffer(size);
         // First byte: Version (2b), Padding (1b), RR count (5b)
         byte b = packet.getVersion().getByte();
         if (padding > 0) {
@@ -124,12 +125,12 @@ public class ReceiverReportPacket extends AbstractReportPacket {
     // ControlPacket --------------------------------------------------------------------------------------------------
 
     @Override
-    public ChannelBuffer encode(int currentCompoundLength, int fixedBlockSize) {
+    public ByteBuf encode(int currentCompoundLength, int fixedBlockSize) {
         return encode(currentCompoundLength, fixedBlockSize, this);
     }
 
     @Override
-    public ChannelBuffer encode() {
+    public ByteBuf encode() {
         return encode(0, 0, this);
     }
 

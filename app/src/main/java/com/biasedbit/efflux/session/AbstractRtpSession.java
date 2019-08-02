@@ -17,9 +17,6 @@
 package com.biasedbit.efflux.session;
 
 import com.biasedbit.efflux.logging.Logger;
-import com.biasedbit.efflux.network.ControlHandler;
-import com.biasedbit.efflux.network.ControlPacketDecoder;
-import com.biasedbit.efflux.network.ControlPacketEncoder;
 import com.biasedbit.efflux.network.DataHandler;
 import com.biasedbit.efflux.network.DataPacketDecoder;
 import com.biasedbit.efflux.network.DataPacketEncoder;
@@ -39,35 +36,42 @@ import com.biasedbit.efflux.participant.ParticipantDatabase;
 import com.biasedbit.efflux.participant.ParticipantOperation;
 import com.biasedbit.efflux.participant.RtpParticipant;
 import com.biasedbit.efflux.participant.RtpParticipantInfo;
-import org.jboss.netty.bootstrap.ConnectionlessBootstrap;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.FixedReceiveBufferSizePredictorFactory;
-import org.jboss.netty.channel.socket.DatagramChannel;
-import org.jboss.netty.channel.socket.DatagramChannelFactory;
-import org.jboss.netty.channel.socket.nio.NioDatagramChannelFactory;
-import org.jboss.netty.channel.socket.oio.OioDatagramChannelFactory;
-import org.jboss.netty.handler.execution.ExecutionHandler;
-import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
-import org.jboss.netty.util.HashedWheelTimer;
-import org.jboss.netty.util.Timeout;
-import org.jboss.netty.util.TimerTask;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.util.CharsetUtil;
+import io.netty.util.HashedWheelTimer;
+import io.netty.util.Timeout;
+import io.netty.util.TimerTask;
+import io.reactivex.Observer;
+import io.reactivex.Scheduler;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.schedulers.Schedulers;
+
 /**
  * @author <a:mailto="bruno.carvalho@wit-software.com" />Bruno de Carvalho</a>
  */
-public abstract class AbstractRtpSession implements RtpSession, TimerTask {
+public abstract class AbstractRtpSession implements RtpSession {
 
     // constants ------------------------------------------------------------------------------------------------------
 
@@ -92,7 +96,6 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
     protected final String id;
     protected final int payloadType;
     protected final HashedWheelTimer timer;
-    protected final OrderedMemoryAwareThreadPoolExecutor executor;
     protected String host;
     protected boolean useNio;
     protected boolean discardOutOfOrder;
@@ -112,10 +115,10 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
     protected final List<RtpSessionDataListener> dataListeners;
     protected final List<RtpSessionControlListener> controlListeners;
     protected final List<RtpSessionEventListener> eventListeners;
-    protected ConnectionlessBootstrap dataBootstrap;
-    protected ConnectionlessBootstrap controlBootstrap;
+    protected Bootstrap dataBootstrap;
+//    protected Bootstrap controlBootstrap;
     protected DatagramChannel dataChannel;
-    protected DatagramChannel controlChannel;
+//    protected DatagramChannel controlChannel;
     protected final AtomicInteger sequence;
     protected final AtomicBoolean sentOrReceivedPackets;
     protected final AtomicInteger collisions;
@@ -127,21 +130,10 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
     // constructors ---------------------------------------------------------------------------------------------------
 
     public AbstractRtpSession(String id, int payloadType, RtpParticipant local) {
-        this(id, payloadType, local, null, null);
+        this(id, payloadType, local, null);
     }
 
-    public AbstractRtpSession(String id, int payloadType, RtpParticipant local,
-                              HashedWheelTimer timer) {
-        this(id, payloadType, local, timer, null);
-    }
-
-    public AbstractRtpSession(String id, int payloadType, RtpParticipant local,
-                              OrderedMemoryAwareThreadPoolExecutor executor) {
-        this(id, payloadType, local, null, executor);
-    }
-
-    public AbstractRtpSession(String id, int payloadType, RtpParticipant local, HashedWheelTimer timer,
-                              OrderedMemoryAwareThreadPoolExecutor executor) {
+    public AbstractRtpSession(String id, int payloadType, RtpParticipant local, HashedWheelTimer timer) {
         if ((payloadType < 0) || (payloadType > 127)) {
             throw new IllegalArgumentException("PayloadType must be in range [0;127]");
         }
@@ -154,7 +146,6 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
         this.payloadType = payloadType;
         this.localParticipant = local;
         this.participantDatabase = this.createDatabase();
-        this.executor = executor;
         if (timer == null) {
             this.timer = new HashedWheelTimer(1, TimeUnit.SECONDS);
             this.internalTimer = true;
@@ -196,163 +187,83 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
         return this.payloadType;
     }
 
-    @Override
-    public synchronized boolean init() {
-        if (this.running.get()) {
-            return true;
+
+
+    public class RtpDatasourceHander extends SimpleChannelInboundHandler {
+
+        private io.reactivex.Observable<byte[]> datasource;
+        private Disposable disposable;
+
+
+        public RtpDatasourceHander(io.reactivex.Observable<byte[]> datasource) {
+            super(true);
+            this.datasource = datasource;
         }
 
-        DatagramChannelFactory factory;
-        if (this.useNio) {
-            factory = new OioDatagramChannelFactory(Executors.newCachedThreadPool());
-        } else {
-            factory = new NioDatagramChannelFactory(Executors.newCachedThreadPool());
-        }
-
-        this.dataBootstrap = new ConnectionlessBootstrap(factory);
-        this.dataBootstrap.setOption("sendBufferSize", this.sendBufferSize);
-        this.dataBootstrap.setOption("receiveBufferSize", this.receiveBufferSize);
-        this.dataBootstrap.setOption("receiveBufferSizePredictorFactory",
-                                     new FixedReceiveBufferSizePredictorFactory(this.receiveBufferSize));
-        this.dataBootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-            public ChannelPipeline getPipeline() throws Exception {
-                ChannelPipeline pipeline = Channels.pipeline();
-                pipeline.addLast("decoder", new DataPacketDecoder());
-                pipeline.addLast("encoder", DataPacketEncoder.getInstance());
-                if (executor != null) {
-                    pipeline.addLast("executorHandler", new ExecutionHandler(executor));
-                }
-                pipeline.addLast("handler", new DataHandler(AbstractRtpSession.this));
-                return pipeline;
-            }
-        });
-        this.controlBootstrap = new ConnectionlessBootstrap(factory);
-        this.controlBootstrap.setOption("sendBufferSize", this.sendBufferSize);
-        this.controlBootstrap.setOption("receiveBufferSize", this.receiveBufferSize);
-        this.controlBootstrap.setOption("receiveBufferSizePredictorFactory",
-                                        new FixedReceiveBufferSizePredictorFactory(this.receiveBufferSize));
-        this.controlBootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-            public ChannelPipeline getPipeline() throws Exception {
-                ChannelPipeline pipeline = Channels.pipeline();
-                pipeline.addLast("decoder", new ControlPacketDecoder());
-                pipeline.addLast("encoder", ControlPacketEncoder.getInstance());
-                if (executor != null) {
-                    pipeline.addLast("executorHandler", new ExecutionHandler(executor));
-                }
-                pipeline.addLast("handler", new ControlHandler(AbstractRtpSession.this));
-                return pipeline;
-            }
-        });
-
-        SocketAddress dataAddress = this.localParticipant.getDataDestination();
-        SocketAddress controlAddress = this.localParticipant.getControlDestination();
-
-        try {
-            this.dataChannel = (DatagramChannel) this.dataBootstrap.bind(dataAddress);
-        } catch (Exception e) {
-            LOG.error("Failed to bind data channel for session with id " + this.id, e);
-            this.dataBootstrap.releaseExternalResources();
-            this.controlBootstrap.releaseExternalResources();
-            return false;
-        }
-        try {
-            this.controlChannel = (DatagramChannel) this.controlBootstrap.bind(controlAddress);
-        } catch (Exception e) {
-            LOG.error("Failed to bind control channel for session with id " + this.id, e);
-            this.dataChannel.close();
-            this.dataBootstrap.releaseExternalResources();
-            this.controlBootstrap.releaseExternalResources();
-            return false;
-        }
-
-        LOG.debug("Data & Control channels bound for RtpSession with id {}.", this.id);
-        // Send first RTCP packet.
-        this.joinSession(this.localParticipant.getSsrc());
-        this.running.set(true);
-
-        // Add the cleaner.
-        this.timer.newTimeout(new TimerTask() {
-            @Override
-            public void run(Timeout timeout) throws Exception {
-                if (!running.get()) {
-                    return;
+        @Override
+        public void channelActive(final ChannelHandlerContext ctx) throws Exception {
+            running.set(true);
+//            ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
+            datasource
+//                    .subscribeOn(Schedulers.io())
+                    .subscribe(new Observer<byte[]>() {
+                @Override
+                public void onSubscribe(Disposable d) {
+                    disposable = d;
                 }
 
-                participantDatabase.cleanup();
-                timer.newTimeout(this, participantDatabaseCleanup, TimeUnit.SECONDS);
-            }
-        }, this.participantDatabaseCleanup, TimeUnit.SECONDS);
-        // Add the RTCP generator.
-        if (this.automatedRtcpHandling) {
-            this.timer.newTimeout(this, this.updatePeriodicRtcpSendInterval(), TimeUnit.SECONDS);
+                @Override
+                public void onNext(byte[] o) {
+                    ctx.writeAndFlush(wrapData(o, new Date().getTime()));
+//                    ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
+                }
+
+                @Override
+                public void onError(Throwable e) {
+
+                }
+
+                @Override
+                public void onComplete() {
+//                ctx.channel().closeFuture().sync();
+                }
+            });
+
         }
 
-        if (this.internalTimer) {
-            this.timer.start();
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            running.set(false);
+            if(disposable!=null && !disposable.isDisposed()) disposable.dispose();
         }
 
-        return true;
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+
+        }
     }
 
-    @Override
-    public void terminate() {
-        this.terminate(RtpSessionEventListener.TERMINATE_CALLED);
-    }
+//    @Override
+//    public void terminate() {
+//        this.terminate(RtpSessionEventListener.TERMINATE_CALLED);
+//    }
 
-    @Override
-    public boolean sendData(byte[] data, long timestamp, boolean marked) {
+    DataPacket wrapData(byte[] data, long timestamp) {
         if (!this.running.get()) {
-            return false;
+            return null;
         }
 
         DataPacket packet = new DataPacket();
         // Other fields will be set by sendDataPacket()
         packet.setTimestamp(timestamp);
         packet.setData(data);
-        packet.setMarker(marked);
-
-        return this.sendDataPacket(packet);
-    }
-
-    @Override
-    public boolean sendDataPacket(DataPacket packet) {
-        if (!this.running.get()) {
-            return false;
-        }
-
         packet.setPayloadType(this.payloadType);
         packet.setSsrc(this.localParticipant.getSsrc());
         packet.setSequenceNumber(this.sequence.incrementAndGet());
-        this.internalSendData(packet);
-        return true;
+        return packet;
+
     }
 
-    @Override
-    public boolean sendControlPacket(ControlPacket packet) {
-        // Only allow sending explicit RTCP packets if all the following conditions are met:
-        // 1. session is running
-        // 2. automated rtcp handling is disabled (except for APP_DATA packets) 
-        if (!this.running.get()) {
-            return false;
-        }
-
-        if (ControlPacket.Type.APP_DATA.equals(packet.getType()) || !this.automatedRtcpHandling) {
-            this.internalSendControl(packet);
-            return true;
-        }
-
-        return false;
-    }
-
-    @Override
-    public boolean sendControlPacket(CompoundControlPacket packet) {
-        if (this.running.get() && !this.automatedRtcpHandling) {
-            this.internalSendControl(packet);
-            return true;
-        }
-
-        return false;
-    }
 
     @Override
     public RtpParticipant getLocalParticipant() {
@@ -390,15 +301,15 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
         this.dataListeners.remove(listener);
     }
 
-    @Override
-    public void addControlListener(RtpSessionControlListener listener) {
-        this.controlListeners.add(listener);
-    }
-
-    @Override
-    public void removeControlListener(RtpSessionControlListener listener) {
-        this.controlListeners.remove(listener);
-    }
+//    @Override
+//    public void addControlListener(RtpSessionControlListener listener) {
+//        this.controlListeners.add(listener);
+//    }
+//
+//    @Override
+//    public void removeControlListener(RtpSessionControlListener listener) {
+//        this.controlListeners.remove(listener);
+//    }
 
     @Override
     public void addEventListener(RtpSessionEventListener listener) {
@@ -425,13 +336,13 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
 
         if (packet.getSsrc() == this.localParticipant.getSsrc()) {
             // Sending data to ourselves? Consider this a loop and bail out!
-            if (origin.equals(this.localParticipant.getDataDestination())) {
-                this.terminate(new Throwable("Loop detected: session is directly receiving its own packets"));
-                return;
-            } else if (this.collisions.incrementAndGet() > this.maxCollisionsBeforeConsideringLoop) {
-                this.terminate(new Throwable("Loop detected after " + this.collisions.get() + " SSRC collisions"));
-                return;
-            }
+//            if (origin.equals(this.localParticipant.getDataDestination())) {
+//                this.terminate(new Throwable("Loop detected: session is directly receiving its own packets"));
+//                return;
+//            } else if (this.collisions.incrementAndGet() > this.maxCollisionsBeforeConsideringLoop) {
+//                this.terminate(new Throwable("Loop detected after " + this.collisions.get() + " SSRC collisions"));
+//                return;
+//            }
 
             long oldSsrc = this.localParticipant.getSsrc();
             long newSsrc = this.localParticipant.resolveSsrcConflict(packet.getSsrc());
@@ -443,10 +354,10 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
             // our own SSRC to something else (nothing else is required because the collision was prematurely detected
             // and avoided).
             // http://tools.ietf.org/html/rfc3550#section-8.1, last paragraph
-            if (this.sentOrReceivedPackets.getAndSet(true)) {
-                this.leaveSession(oldSsrc, "SSRC collision detected; rejoining with new SSRC.");
-                this.joinSession(newSsrc);
-            }
+//            if (this.sentOrReceivedPackets.getAndSet(true)) {
+//                this.leaveSession(oldSsrc, "SSRC collision detected; rejoining with new SSRC.");
+//                this.joinSession(newSsrc);
+//            }
 
             LOG.warn("SSRC collision with remote end detected on session with id {}; updating SSRC from {} to {}.",
                      this.id, oldSsrc, newSsrc);
@@ -479,68 +390,47 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
             listener.dataPacketReceived(this, participant.getInfo(), packet);
         }
     }
-
-    // ControlPacketReceiver ------------------------------------------------------------------------------------------
-
-    @Override
-    public void controlPacketReceived(SocketAddress origin, CompoundControlPacket packet) {
-        if (!this.running.get()) {
-            return;
-        }
-
-        if (!this.automatedRtcpHandling) {
-            for (RtpSessionControlListener listener : this.controlListeners) {
-                listener.controlPacketReceived(this, packet);
-            }
-
-            return;
-        }
-
-        for (ControlPacket controlPacket : packet.getControlPackets()) {
-            switch (controlPacket.getType()) {
-                case SENDER_REPORT:
-                case RECEIVER_REPORT:
-                    this.handleReportPacket(origin, (AbstractReportPacket) controlPacket);
-                    break;
-                case SOURCE_DESCRIPTION:
-                    this.handleSdesPacket(origin, (SourceDescriptionPacket) controlPacket);
-                    break;
-                case BYE:
-                    this.handleByePacket(origin, (ByePacket) controlPacket);
-                    break;
-                case APP_DATA:
-                    for (RtpSessionControlListener listener : this.controlListeners) {
-                        listener.appDataReceived(this, (AppDataPacket) controlPacket);
-                    }
-                default:
-                    // do nothing, unknown case
-            }
-        }
-    }
+//
+//    // ControlPacketReceiver ------------------------------------------------------------------------------------------
+//
+//    @Override
+//    public void controlPacketReceived(SocketAddress origin, CompoundControlPacket packet) {
+//        if (!this.running.get()) {
+//            return;
+//        }
+//
+//        if (!this.automatedRtcpHandling) {
+//            for (RtpSessionControlListener listener : this.controlListeners) {
+//                listener.controlPacketReceived(this, packet);
+//            }
+//
+//            return;
+//        }
+//
+//        for (ControlPacket controlPacket : packet.getControlPackets()) {
+//            switch (controlPacket.getType()) {
+//                case SENDER_REPORT:
+//                case RECEIVER_REPORT:
+//                    this.handleReportPacket(origin, (AbstractReportPacket) controlPacket);
+//                    break;
+//                case SOURCE_DESCRIPTION:
+//                    this.handleSdesPacket(origin, (SourceDescriptionPacket) controlPacket);
+//                    break;
+//                case BYE:
+//                    this.handleByePacket(origin, (ByePacket) controlPacket);
+//                    break;
+//                case APP_DATA:
+//                    for (RtpSessionControlListener listener : this.controlListeners) {
+//                        listener.appDataReceived(this, (AppDataPacket) controlPacket);
+//                    }
+//                default:
+//                    // do nothing, unknown case
+//            }
+//        }
+//    }
 
     // Runnable -------------------------------------------------------------------------------------------------------
 
-    @Override
-    public void run(Timeout timeout) throws Exception {
-        if (!this.running.get()) {
-            return;
-        }
-
-        final long currentSsrc = this.localParticipant.getSsrc();
-        final SourceDescriptionPacket sdesPacket = buildSdesPacket(currentSsrc);
-        this.participantDatabase.doWithReceivers(new ParticipantOperation() {
-            @Override
-            public void doWithParticipant(RtpParticipant participant) throws Exception {
-                AbstractReportPacket report = buildReportPacket(currentSsrc, participant);
-                internalSendControl(new CompoundControlPacket(report, sdesPacket));
-            }
-        });
-
-        if (!this.running.get()) {
-            return;
-        }
-        this.timer.newTimeout(this, this.updatePeriodicRtcpSendInterval(), TimeUnit.SECONDS);
-    }
 
     // protected helpers ----------------------------------------------------------------------------------------------
 
@@ -606,131 +496,7 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
 
     protected abstract ParticipantDatabase createDatabase();
 
-    protected void internalSendData(final DataPacket packet) {
-        this.participantDatabase.doWithReceivers(new ParticipantOperation() {
-            @Override
-            public void doWithParticipant(RtpParticipant participant) throws Exception {
-                if (participant.receivedBye()) {
-                    return;
-                }
-                try {
-                    writeToData(packet, participant.getDataDestination());
-                } catch (Exception e) {
-                    LOG.error("Failed to send RTP packet to participants in session with id {}.", id);
-                }
-            }
 
-            @Override
-            public String toString() {
-                return "internalSendData() for session with id " + id;
-            }
-        });
-    }
-
-    protected void internalSendControl(ControlPacket packet, RtpParticipant participant) {
-        if (!participant.isReceiver() || participant.receivedBye()) {
-            return;
-        }
-
-        try {
-            this.writeToControl(packet, participant.getControlDestination());
-        } catch (Exception e) {
-            LOG.error("Failed to send RTCP packet to {} in session with id {}.", participant, this.id);
-        }
-    }
-
-    protected void internalSendControl(CompoundControlPacket packet, RtpParticipant participant) {
-        if (!participant.isReceiver() || participant.receivedBye()) {
-            return;
-        }
-
-        try {
-            this.writeToControl(packet, participant.getControlDestination());
-        } catch (Exception e) {
-            LOG.error("Failed to send RTCP compound packet to {} in session with id {}.", participant, this.id);
-        }
-    }
-
-    protected void internalSendControl(final ControlPacket packet) {
-        this.participantDatabase.doWithReceivers(new ParticipantOperation() {
-            @Override
-            public void doWithParticipant(RtpParticipant participant) throws Exception {
-                if (participant.receivedBye()) {
-                    return;
-                }
-                try {
-                    writeToControl(packet, participant.getControlDestination());
-                } catch (Exception e) {
-                    LOG.error("Failed to send RTCP packet to participants in session with id {}.", id);
-                }
-            }
-
-            @Override
-            public String toString() {
-                return "internalSendControl() for session with id " + id;
-            }
-        });
-    }
-
-    protected void internalSendControl(final CompoundControlPacket packet) {
-        this.participantDatabase.doWithReceivers(new ParticipantOperation() {
-            @Override
-            public void doWithParticipant(RtpParticipant participant) throws Exception {
-                if (participant.receivedBye()) {
-                    return;
-                }
-                try {
-                    writeToControl(packet, participant.getControlDestination());
-                } catch (Exception e) {
-                    LOG.error("Failed to send RTCP compound packet to participants in session with id {}.", id);
-                }
-            }
-
-            @Override
-            public String toString() {
-                return "internalSendControl(CompoundControlPacket) for session with id " + id;
-            }
-        });
-    }
-
-    protected void writeToData(DataPacket packet, SocketAddress destination) {
-        this.dataChannel.write(packet, destination);
-    }
-
-    protected void writeToControl(ControlPacket packet, SocketAddress destination) {
-        this.controlChannel.write(packet, destination);
-    }
-
-    protected void writeToControl(CompoundControlPacket packet, SocketAddress destination) {
-        this.controlChannel.write(packet, destination);
-    }
-
-    protected void joinSession(long currentSsrc) {
-        if (!this.automatedRtcpHandling) {
-            return;
-        }
-        // Joining a session, so send an empty receiver report.
-        ReceiverReportPacket emptyReceiverReport = new ReceiverReportPacket();
-        emptyReceiverReport.setSenderSsrc(currentSsrc);
-        // Send also an SDES packet in the compound RTCP packet.
-        SourceDescriptionPacket sdesPacket = this.buildSdesPacket(currentSsrc);
-
-        CompoundControlPacket compoundPacket = new CompoundControlPacket(emptyReceiverReport, sdesPacket);
-        this.internalSendControl(compoundPacket);
-    }
-
-    protected void leaveSession(final long currentSsrc, String motive) {
-        if (!this.automatedRtcpHandling) {
-            return;
-        }
-
-        final SourceDescriptionPacket sdesPacket = this.buildSdesPacket(currentSsrc);
-        final ByePacket byePacket = new ByePacket();
-        byePacket.addSsrc(currentSsrc);
-        byePacket.setReasonForLeaving(motive);
-
-        this.internalSendControl(new CompoundControlPacket(sdesPacket, byePacket));
-    }
 
     protected AbstractReportPacket buildReportPacket(long currentSsrc, RtpParticipant context) {
         AbstractReportPacket packet;
@@ -762,75 +528,75 @@ public abstract class AbstractRtpSession implements RtpSession, TimerTask {
 
         return packet;
     }
-
-    protected SourceDescriptionPacket buildSdesPacket(long currentSsrc) {
-        SourceDescriptionPacket sdesPacket = new SourceDescriptionPacket();
-        SdesChunk chunk = new SdesChunk(currentSsrc);
-
-        RtpParticipantInfo info = this.localParticipant.getInfo();
-        if (info.getCname() == null) {
-            info.setCname(new StringBuilder()
-                    .append("efflux/").append(this.id).append('@')
-                    .append(this.dataChannel.getLocalAddress()).toString());
-        }
-        chunk.addItem(SdesChunkItems.createCnameItem(info.getCname()));
-
-        if (info.getName() != null) {
-            chunk.addItem(SdesChunkItems.createNameItem(info.getName()));
-        }
-
-        if (info.getEmail() != null) {
-            chunk.addItem(SdesChunkItems.createEmailItem(info.getEmail()));
-        }
-
-        if (info.getPhone() != null) {
-            chunk.addItem(SdesChunkItems.createPhoneItem(info.getPhone()));
-        }
-
-        if (info.getLocation() != null) {
-            chunk.addItem(SdesChunkItems.createLocationItem(info.getLocation()));
-        }
-
-        if (info.getTool() == null) {
-            info.setTool(VERSION);
-        }
-        chunk.addItem(SdesChunkItems.createToolItem(info.getTool()));
-
-        if (info.getNote() != null) {
-            chunk.addItem(SdesChunkItems.createLocationItem(info.getNote()));
-        }
-        sdesPacket.addItem(chunk);
-
-        return sdesPacket;
-    }
-
-    protected synchronized void terminate(Throwable cause) {
-        // Always set to false, even it if was already set at false.
-        if (!this.running.getAndSet(false)) {
-            return;
-        }
-
-        if (this.internalTimer) {
-            this.timer.stop();
-        }
-
-        this.dataListeners.clear();
-        this.controlListeners.clear();
-
-        // Close data channel, send BYE RTCP packets and close control channel.
-        this.dataChannel.close();
-        this.leaveSession(this.localParticipant.getSsrc(), "Session terminated.");
-        this.controlChannel.close();
-
-        this.dataBootstrap.releaseExternalResources();
-        this.controlBootstrap.releaseExternalResources();
-        LOG.debug("RtpSession with id {} terminated.", this.id);
-
-        for (RtpSessionEventListener listener : this.eventListeners) {
-            listener.sessionTerminated(this, cause);
-        }
-        this.eventListeners.clear();
-    }
+//
+//    protected SourceDescriptionPacket buildSdesPacket(long currentSsrc) {
+//        SourceDescriptionPacket sdesPacket = new SourceDescriptionPacket();
+//        SdesChunk chunk = new SdesChunk(currentSsrc);
+//
+//        RtpParticipantInfo info = this.localParticipant.getInfo();
+//        if (info.getCname() == null) {
+//            info.setCname(new StringBuilder()
+//                    .append("efflux/").append(this.id).append('@')
+//                    .append(this.dataChannel.getLocalAddress()).toString());
+//        }
+//        chunk.addItem(SdesChunkItems.createCnameItem(info.getCname()));
+//
+//        if (info.getName() != null) {
+//            chunk.addItem(SdesChunkItems.createNameItem(info.getName()));
+//        }
+//
+//        if (info.getEmail() != null) {
+//            chunk.addItem(SdesChunkItems.createEmailItem(info.getEmail()));
+//        }
+//
+//        if (info.getPhone() != null) {
+//            chunk.addItem(SdesChunkItems.createPhoneItem(info.getPhone()));
+//        }
+//
+//        if (info.getLocation() != null) {
+//            chunk.addItem(SdesChunkItems.createLocationItem(info.getLocation()));
+//        }
+//
+//        if (info.getTool() == null) {
+//            info.setTool(VERSION);
+//        }
+//        chunk.addItem(SdesChunkItems.createToolItem(info.getTool()));
+//
+//        if (info.getNote() != null) {
+//            chunk.addItem(SdesChunkItems.createLocationItem(info.getNote()));
+//        }
+//        sdesPacket.addItem(chunk);
+//
+//        return sdesPacket;
+////    }
+//
+//    protected synchronized void terminate(Throwable cause) {
+//        // Always set to false, even it if was already set at false.
+//        if (!this.running.getAndSet(false)) {
+//            return;
+//        }
+//
+//        if (this.internalTimer) {
+//            this.timer.stop();
+//        }
+//
+//        this.dataListeners.clear();
+//        this.controlListeners.clear();
+//
+//        // Close data channel, send BYE RTCP packets and close control channel.
+//        this.dataChannel.close();
+//        this.leaveSession(this.localParticipant.getSsrc(), "Session terminated.");
+//        this.controlChannel.close();
+//
+//        this.dataBootstrap.releaseExternalResources();
+//        this.controlBootstrap.releaseExternalResources();
+//        LOG.debug("RtpSession with id {} terminated.", this.id);
+//
+//        for (RtpSessionEventListener listener : this.eventListeners) {
+//            listener.sessionTerminated(this, cause);
+//        }
+//        this.eventListeners.clear();
+//    }
 
     protected void resetSendStats() {
         this.sentByteCounter.set(0);

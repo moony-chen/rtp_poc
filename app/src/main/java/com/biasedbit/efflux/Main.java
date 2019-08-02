@@ -7,7 +7,6 @@ import com.biasedbit.efflux.participant.RtpParticipantInfo;
 import com.biasedbit.efflux.session.RtpSession;
 import com.biasedbit.efflux.session.RtpSessionDataListener;
 import com.biasedbit.efflux.session.SingleParticipantSession;
-import org.jboss.netty.util.Timeout;
 
 /**
  * Created by fangchen on 7/28/19.
@@ -30,7 +29,7 @@ public class Main {
         dp.setPayloadType(1);
         dp.setSequenceNumber(1);
         dp.setData(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
-        session.sendDataPacket(dp);
+//        session.sendDataPacket(dp);
         Thread.sleep(2000);
     }
 }

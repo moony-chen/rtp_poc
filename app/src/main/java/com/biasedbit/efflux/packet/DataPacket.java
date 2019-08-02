@@ -16,11 +16,12 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 /**
  *  0                   1                   2                   3
@@ -62,7 +63,7 @@ public class DataPacket {
 
     private List<Long> contributingSourceIds;
 
-    private ChannelBuffer data;
+    private ByteBuf data;
 
     // constructors ---------------------------------------------------------------------------------------------------
 
@@ -73,10 +74,10 @@ public class DataPacket {
     // public static methods ------------------------------------------------------------------------------------------
 
     public static DataPacket decode(byte[] data) {
-        return decode(ChannelBuffers.wrappedBuffer(data));
+        return decode(Unpooled.wrappedBuffer(data));
     }
 
-    public static DataPacket decode(ChannelBuffer buffer) throws IndexOutOfBoundsException {
+    public static DataPacket decode(ByteBuf buffer) throws IndexOutOfBoundsException {
         if (buffer.readableBytes() < 12) {
             throw new IllegalArgumentException("A RTP packet must be at least 12 octets long");
         }
@@ -132,7 +133,7 @@ public class DataPacket {
         return packet;
     }
 
-    public static ChannelBuffer encode(int fixedBlockSize, DataPacket packet) {
+    public static ByteBuf encode(int fixedBlockSize, DataPacket packet) {
         int size = 12; // Fixed width
         if (packet.hasExtension()) {
             size += 4 + packet.getExtensionDataSize();
@@ -154,7 +155,7 @@ public class DataPacket {
         }
         size += padding;
 
-        ChannelBuffer buffer = ChannelBuffers.buffer(size);
+        ByteBuf buffer = Unpooled.buffer(size);
 
         // Version, Padding, eXtension, CSRC Count
         byte b = packet.getVersion().getByte();
@@ -213,11 +214,11 @@ public class DataPacket {
 
     // public methods -------------------------------------------------------------------------------------------------
 
-    public ChannelBuffer encode(int fixedBlockSize) {
+    public ByteBuf encode(int fixedBlockSize) {
         return encode(fixedBlockSize, this);
     }
 
-    public ChannelBuffer encode() {
+    public ByteBuf encode() {
         return encode(0, this);
     }
 
@@ -340,11 +341,11 @@ public class DataPacket {
         this.contributingSourceIds = contributingSourceIds;
     }
 
-    public ChannelBuffer getData() {
+    public ByteBuf getData() {
         return data;
     }
 
-    public void setData(ChannelBuffer data) {
+    public void setData(ByteBuf data) {
         this.data = data;
     }
 
@@ -353,7 +354,7 @@ public class DataPacket {
     }
 
     public void setData(byte[] data) {
-        this.data = ChannelBuffers.wrappedBuffer(data);
+        this.data = Unpooled.wrappedBuffer(data);
     }
 
     // low level overrides --------------------------------------------------------------------------------------------

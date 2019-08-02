@@ -16,12 +16,12 @@
 
 package com.biasedbit.efflux.packet;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 /**
  * @author <a:mailto="bruno.carvalho@wit-software.com" />Bruno de Carvalho</a>
@@ -40,7 +40,7 @@ public class SourceDescriptionPacket extends ControlPacket {
 
     // public static methods ------------------------------------------------------------------------------------------
 
-    public static SourceDescriptionPacket decode(ChannelBuffer buffer, boolean hasPadding, byte innerBlocks,
+    public static SourceDescriptionPacket decode(ByteBuf buffer, boolean hasPadding, byte innerBlocks,
                                                  int length) {
         SourceDescriptionPacket packet = new SourceDescriptionPacket();
         int readable = buffer.readableBytes();
@@ -59,7 +59,7 @@ public class SourceDescriptionPacket extends ControlPacket {
         return packet;
     }
 
-    public static ChannelBuffer encode(int currentCompoundLength, int fixedBlockSize, SourceDescriptionPacket packet) {
+    public static ByteBuf encode(int currentCompoundLength, int fixedBlockSize, SourceDescriptionPacket packet) {
         if ((currentCompoundLength < 0) || ((currentCompoundLength % 4) > 0)) {
             throw new IllegalArgumentException("Current compound length must be a non-negative multiple of 4");
         }
@@ -68,12 +68,12 @@ public class SourceDescriptionPacket extends ControlPacket {
         }
 
         int size = 4;
-        ChannelBuffer buffer;
-        List<ChannelBuffer> encodedChunks = null;
+        ByteBuf buffer;
+        List<ByteBuf> encodedChunks = null;
         if (packet.chunks != null) {
-            encodedChunks = new ArrayList<ChannelBuffer>(packet.chunks.size());
+            encodedChunks = new ArrayList<ByteBuf>(packet.chunks.size());
             for (SdesChunk chunk : packet.chunks) {
-                ChannelBuffer encodedChunk = chunk.encode();
+                ByteBuf encodedChunk = chunk.encode();
                 encodedChunks.add(encodedChunk);
                 size += encodedChunk.readableBytes();
             }
@@ -94,7 +94,7 @@ public class SourceDescriptionPacket extends ControlPacket {
         size += padding;
 
         // Allocate the buffer and write contents
-        buffer = ChannelBuffers.buffer(size);
+        buffer = Unpooled.buffer(size);
         // First byte: Version (2b), Padding (1b), SSRC (chunks) count (5b)
         byte b = packet.getVersion().getByte();
         if (padding > 0) {
@@ -111,7 +111,7 @@ public class SourceDescriptionPacket extends ControlPacket {
         buffer.writeShort(sizeInOctets);
         // Remaining bytes: encoded chunks
         if (encodedChunks != null) {
-            for (ChannelBuffer encodedChunk : encodedChunks) {
+            for (ByteBuf encodedChunk : encodedChunks) {
                 buffer.writeBytes(encodedChunk);
             }
         }
@@ -133,12 +133,12 @@ public class SourceDescriptionPacket extends ControlPacket {
     // ControlPacket --------------------------------------------------------------------------------------------------
 
     @Override
-    public ChannelBuffer encode(int currentCompoundLength, int fixedBlockSize) {
+    public ByteBuf encode(int currentCompoundLength, int fixedBlockSize) {
         return encode(currentCompoundLength, fixedBlockSize, this);
     }
 
     @Override
-    public ChannelBuffer encode() {
+    public ByteBuf encode() {
         return encode(0, 0, this);
     }
 
