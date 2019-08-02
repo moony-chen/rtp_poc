@@ -30,6 +30,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Observable;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.bootstrap.Bootstrap;
@@ -99,7 +100,7 @@ public class SingleParticipantSession extends AbstractRtpSession {
     }
 
     @Override
-    public boolean init(RtpDatasource datasource) throws Exception{
+    public boolean init(io.reactivex.Observable<byte[]> datasource) throws Exception{
         if (this.running.get()) {
             return true;
         }
@@ -126,8 +127,6 @@ public class SingleParticipantSession extends AbstractRtpSession {
                 .option(ChannelOption.SO_SNDBUF, this.sendBufferSize);
 
         try {
-
-
 
 
             ChannelFuture f = this.dataBootstrap.connect().sync();

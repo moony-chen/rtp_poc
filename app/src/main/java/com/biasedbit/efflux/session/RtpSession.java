@@ -33,7 +33,7 @@ public interface RtpSession extends DataPacketReceiver {
 
     int getPayloadType();
 
-    boolean init(RtpDatasource datasource) throws  Exception;
+    boolean init(io.reactivex.Observable<byte[]> datasource) throws  Exception;
 
 //    void terminate();
 

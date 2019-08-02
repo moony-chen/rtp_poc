@@ -1,8 +1,12 @@
 package com.example.rtp_poc;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -58,9 +62,13 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.util.CharsetUtil;
+import io.reactivex.Observable;
 import io.reactivex.Observer;
+import io.reactivex.subjects.PublishSubject;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final int MY_PERMISSIONS_REQUEST_RECORD_AUDIO = 100;
 
     private static final String TAG = "MainActivity";
     //指定音频源 这个和MediaRecorder是相同的 MediaRecorder.AudioSource.MIC指的是麦克风
@@ -81,6 +89,25 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted
+
+                // No explanation needed; request the permission
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.RECORD_AUDIO},
+                        MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
+                return;
+        }
+
+        startAudio();
+
+
+    }
+
+//    private  SingleParticipantSession session;
+
+    private void startAudio() {
         // AudioRecord 得到录制最小缓冲区的大小
         bufferSize = AudioRecord.getMinBufferSize(mSampleRate,
                 mChannelConfig,
@@ -98,6 +125,9 @@ public class MainActivity extends AppCompatActivity {
             AudioManager audio =  (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
 
+            initRtc(this.audioSource);
+
+
 //            InetAddress ia = InetAddress.getByAddress(getLocalIPAddress());
 
 //            ((TextView)findViewById(R.id.lblLocalPort)).setText(String.valueOf(localPort));
@@ -105,7 +135,13 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onClick(View v) {
-                    send();
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            send();
+                        }
+                    }, "AudioRecorder Thread").start();
+
 
                 }
             });
@@ -124,48 +160,76 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-//    private  SingleParticipantSession session;
+    private PublishSubject<byte[]> audioSource = PublishSubject.create();
+
+    private void initRtc(final Observable<byte[]> audioSource) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String remoteAddress = "192.168.1.108";//((EditText)findViewById(R.id.editText2)).getText().toString();
+                String remotePort = "53063";//((EditText)findViewById(R.id.editText1)).getText().toString();
+
+                RtpParticipant localP = RtpParticipant.createReceiver("192.168.1.109", 12345, 11113);
+                RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
+
+                RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
+                session.addDataListener(new RtpSessionDataListener() {
+                    @Override
+                    public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
+                        Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
+                    }
+                });
+                try {
+                    session.init(audioSource);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }, "RTC thread").start();
+
+
+    }
+
 
     private void send() {
-        String remoteAddress = "192.168.1.108";//((EditText)findViewById(R.id.editText2)).getText().toString();
-        String remotePort = "53063";//((EditText)findViewById(R.id.editText1)).getText().toString();
 
-        RtpParticipant localP = RtpParticipant.createReceiver("192.168.1.109", 12345, 11113);
-        RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
-        RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
-        session.addDataListener(new RtpSessionDataListener() {
-            @Override
-            public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-                Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
-            }
-        });
-        try {
-            session.init(new RtpDatasource() {
-                @Override
-                public void subscribe(Observer<? super byte[]> observer) {
-                    observer.onNext(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
-                }
-            });
-        } catch (Exception e) {
-            e.printStackTrace();
+//        this.audioSource.onNext(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
+        audioRecord.startRecording();
+        byte[] buffer = new byte[bufferSize];
+
+
+        while (audioRecord.read(buffer, 0, bufferSize) > 0) {
+
+            this.audioSource.onNext(buffer);
+
         }
-
-//        audioRecord.startRecording();
-//        byte[] buffer = new byte[bufferSize];
-//        DataPacket dp = new DataPacket();
-//        dp.setPayloadType(1);
-//        int seq = 1;
-//        int offset = 0;
 //
+//        mStreamAudioRecorder.start(new StreamAudioRecorder.AudioDataCallback() {
+//            @Override
+//            public void onAudioData(byte[] data, int size) {
+//                if (mFileOutputStream != null) {
+//                    try {
+//                        mFileOutputStream.write(data, 0, size);
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            }
 //
-//        while ((offset += audioRecord.read(buffer, offset, bufferSize)) > 0) {
-//
-//            dp.setSequenceNumber(seq++);
-//            dp.setData(buffer);
-//            session.sendDataPacket(dp);
-//
-//        }
+//            @Override
+//            public void onError() {
+//                mBtnStart.post(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        Toast.makeText(getApplicationContext(), "Record fail",
+//                                Toast.LENGTH_SHORT).show();
+//                        mBtnStart.setText("Start");
+//                        mIsRecording = false;
+//                    }
+//                });
+//            }
+//        });
 
     }
 
@@ -212,5 +276,28 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return bytes;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String[] permissions, int[] grantResults) {
+        switch (requestCode) {
+            case MY_PERMISSIONS_REQUEST_RECORD_AUDIO: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // permission was granted, yay! Do the
+                    // contacts-related task you need to do.
+                    startAudio();
+                } else {
+                    // permission denied, boo! Disable the
+                    // functionality that depends on this permission.
+                }
+                return;
+            }
+
+            // other 'case' lines to check for other
+            // permissions this app might request.
+        }
     }
 }

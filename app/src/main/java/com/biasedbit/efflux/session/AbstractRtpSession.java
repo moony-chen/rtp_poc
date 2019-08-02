@@ -64,7 +64,9 @@ import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timeout;
 import io.netty.util.TimerTask;
 import io.reactivex.Observer;
+import io.reactivex.Scheduler;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.schedulers.Schedulers;
 
 /**
  * @author <a:mailto="bruno.carvalho@wit-software.com" />Bruno de Carvalho</a>
@@ -189,11 +191,11 @@ public abstract class AbstractRtpSession implements RtpSession {
 
     public class RtpDatasourceHander extends SimpleChannelInboundHandler {
 
-        private RtpDatasource datasource;
+        private io.reactivex.Observable<byte[]> datasource;
         private Disposable disposable;
 
 
-        public RtpDatasourceHander(RtpDatasource datasource) {
+        public RtpDatasourceHander(io.reactivex.Observable<byte[]> datasource) {
             super(true);
             this.datasource = datasource;
         }
@@ -202,7 +204,9 @@ public abstract class AbstractRtpSession implements RtpSession {
         public void channelActive(final ChannelHandlerContext ctx) throws Exception {
             running.set(true);
 //            ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
-            datasource.subscribe(new Observer<byte[]>() {
+            datasource
+                    .subscribeOn(Schedulers.io())
+                    .subscribe(new Observer<byte[]>() {
                 @Override
                 public void onSubscribe(Disposable d) {
                     disposable = d;
