@@ -125,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
             AudioManager audio =  (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
 
-            initRtc(this.audioSource);
+
 
 
 //            InetAddress ia = InetAddress.getByAddress(getLocalIPAddress());
@@ -135,6 +135,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onClick(View v) {
+                    initRtc(MainActivity.this.audioSource);
                     new Thread(new Runnable() {
                         @Override
                         public void run() {
@@ -166,10 +167,10 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                String remoteAddress = "192.168.1.108";//((EditText)findViewById(R.id.editText2)).getText().toString();
-                String remotePort = "53063";//((EditText)findViewById(R.id.editText1)).getText().toString();
+                String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
+                String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
 
-                RtpParticipant localP = RtpParticipant.createReceiver("192.168.1.109", 12345, 11113);
+                RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 12345, 11113);
                 RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
                 RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
@@ -246,6 +247,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void stop() {
         audioRecord.stop();
+//        audioRecord.release();
 //        session.terminate();
     }
 

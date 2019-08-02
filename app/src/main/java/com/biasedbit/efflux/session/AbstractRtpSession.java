@@ -205,7 +205,7 @@ public abstract class AbstractRtpSession implements RtpSession {
             running.set(true);
 //            ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
             datasource
-                    .subscribeOn(Schedulers.io())
+//                    .subscribeOn(Schedulers.io())
                     .subscribe(new Observer<byte[]>() {
                 @Override
                 public void onSubscribe(Disposable d) {
