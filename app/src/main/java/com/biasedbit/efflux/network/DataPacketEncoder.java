@@ -20,6 +20,7 @@ import com.biasedbit.efflux.packet.DataPacket;
 
 import java.util.List;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -29,7 +30,7 @@ import io.netty.handler.codec.MessageToMessageEncoder;
  * @author <a href="http://bruno.biasedbit.com/">Bruno de Carvalho</a>
  */
 @ChannelHandler.Sharable
-public class DataPacketEncoder extends MessageToMessageEncoder {
+public class DataPacketEncoder extends MessageToMessageEncoder<DataPacket> {
 
     // constructors ---------------------------------------------------------------------------------------------------
 
@@ -46,10 +47,7 @@ public class DataPacketEncoder extends MessageToMessageEncoder {
 
 
     @Override
-    protected void encode(ChannelHandlerContext ctx, Object msg, List out) throws Exception {
-        if (!(msg instanceof DataPacket)) {
-            out.add( Unpooled.EMPTY_BUFFER);
-        }
+    protected void encode(ChannelHandlerContext ctx, DataPacket msg, List out) throws Exception {
 
         DataPacket packet = (DataPacket) msg;
         if (packet.getDataSize() == 0) {

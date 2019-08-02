@@ -16,7 +16,6 @@
 
 package com.biasedbit.efflux.session;
 
-import com.biasedbit.efflux.network.ControlPacketReceiver;
 import com.biasedbit.efflux.network.DataPacketReceiver;
 import com.biasedbit.efflux.packet.CompoundControlPacket;
 import com.biasedbit.efflux.packet.ControlPacket;
@@ -28,23 +27,20 @@ import java.util.Map;
 /**
  * @author <a href="http://bruno.biasedbit.com/">Bruno de Carvalho</a>
  */
-public interface RtpSession extends DataPacketReceiver, ControlPacketReceiver {
+public interface RtpSession extends DataPacketReceiver {
 
     String getId();
 
     int getPayloadType();
 
-    boolean init();
+    boolean init(RtpDatasource datasource) throws  Exception;
 
-    void terminate();
+//    void terminate();
 
-    boolean sendData(byte[] data, long timestamp, boolean marked);
-
-    boolean sendDataPacket(DataPacket packet);
-
-    boolean sendControlPacket(ControlPacket packet);
-
-    boolean sendControlPacket(CompoundControlPacket packet);
+//
+//    boolean sendControlPacket(ControlPacket packet);
+//
+//    boolean sendControlPacket(CompoundControlPacket packet);
 
     RtpParticipant getLocalParticipant();
 
@@ -60,9 +56,9 @@ public interface RtpSession extends DataPacketReceiver, ControlPacketReceiver {
 
     void removeDataListener(RtpSessionDataListener listener);
 
-    void addControlListener(RtpSessionControlListener listener);
-
-    void removeControlListener(RtpSessionControlListener listener);
+//    void addControlListener(RtpSessionControlListener listener);
+//
+//    void removeControlListener(RtpSessionControlListener listener);
 
     void addEventListener(RtpSessionEventListener listener);
 

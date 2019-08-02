@@ -24,6 +24,14 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 
+import com.biasedbit.efflux.logging.Logger;
+import com.biasedbit.efflux.packet.DataPacket;
+import com.biasedbit.efflux.participant.RtpParticipant;
+import com.biasedbit.efflux.participant.RtpParticipantInfo;
+import com.biasedbit.efflux.session.RtpDatasource;
+import com.biasedbit.efflux.session.RtpSession;
+import com.biasedbit.efflux.session.RtpSessionDataListener;
+import com.biasedbit.efflux.session.SingleParticipantSession;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -50,6 +58,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.util.CharsetUtil;
+import io.reactivex.Observer;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -118,14 +127,38 @@ public class MainActivity extends AppCompatActivity {
 //    private  SingleParticipantSession session;
 
     private void send() {
-        String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
-        String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
-        new LongOperation().execute(remoteAddress, remotePort);
+        String remoteAddress = "192.168.1.108";//((EditText)findViewById(R.id.editText2)).getText().toString();
+        String remotePort = "53063";//((EditText)findViewById(R.id.editText1)).getText().toString();
 
+        RtpParticipant localP = RtpParticipant.createReceiver("192.168.1.109", 12345, 11113);
+        RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
+        RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
+        session.addDataListener(new RtpSessionDataListener() {
+            @Override
+            public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
+                Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
+            }
+        });
+        try {
+            session.init(new RtpDatasource() {
+                @Override
+                public void subscribe(Observer<? super byte[]> observer) {
+                    observer.onNext(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
-
-
+//        audioRecord.startRecording();
+//        byte[] buffer = new byte[bufferSize];
+//        DataPacket dp = new DataPacket();
+//        dp.setPayloadType(1);
+//        int seq = 1;
+//        int offset = 0;
+//
+//
 //        while ((offset += audioRecord.read(buffer, offset, bufferSize)) > 0) {
 //
 //            dp.setSequenceNumber(seq++);
@@ -134,93 +167,6 @@ public class MainActivity extends AppCompatActivity {
 //
 //        }
 
-    }
-
-    private class ClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-//            super.channelActive(ctx);
-            ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
-        }
-
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
-            Log.d(TAG, msg.toString(CharsetUtil.UTF_8));
-        }
-    }
-
-    private class LongOperation extends AsyncTask<String, Void, String> {
-
-        DatagramSocket socket;
-//        private final ChannelGroup group = new DefaultChannelGroup();
-
-        @Override
-        protected String doInBackground(String... params)  {
-//            RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 11111, 11112);
-//            RtpParticipant remoteP = RtpParticipant.createReceiver("10.0.2.3", 50559 , 21112);
-
-//            session = new SingleParticipantSession("id", 1, localP, remoteP);
-//            session.addDataListener(new RtpSessionDataListener() {
-//                @Override
-//                public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-//                    Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
-//                }
-//            });
-//            session.init();
-            EventLoopGroup group = new NioEventLoopGroup();
-
-            try {
-                 socket = new DatagramSocket();
-                final InetAddress destination = InetAddress.getByName("10.0.2.3");
-                byte[] buffer = new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5};
-//                DatagramPacket packet =  new DatagramPacket (buffer,buffer.length,destination,50559);
-//                socket.send(packet);
-
-                SocketAddress remote = new InetSocketAddress("10.0.2.3", 50559);
-
-
-                Bootstrap b = new Bootstrap();
-                b.group(group)
-                        .channel(NioDatagramChannel.class)
-                        .remoteAddress(remote)
-                        .handler(new ChannelInitializer<DatagramChannel>() {
-
-                            @Override
-                            protected void initChannel(DatagramChannel ch) throws Exception {
-                                ch.pipeline().addLast(new ClientHandler());
-                            }
-                        });
-                ChannelFuture f = b.connect().sync();
-                f.channel().closeFuture().sync();
-
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-
-//        audioRecord.startRecording();
-//            byte[] buffer = new byte[bufferSize];
-//            DataPacket dp = new DataPacket();
-//            dp.setPayloadType(1);
-//            int seq = 1;
-//            int offset = 0;
-//
-//            dp.setSequenceNumber(seq++);
-//            dp.setData();
-//            session.sendDataPacket(dp);
-            return "Executed";
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            socket.close();
-        }
-
-        @Override
-        protected void onPreExecute() {}
-
-        @Override
-        protected void onProgressUpdate(Void... values) {}
     }
 
     public int getValidSampleRates() {

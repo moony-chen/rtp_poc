@@ -16,19 +16,32 @@
 
 package com.biasedbit.efflux.session;
 
+import com.biasedbit.efflux.network.DataHandler;
+import com.biasedbit.efflux.network.DataPacketDecoder;
+import com.biasedbit.efflux.network.DataPacketEncoder;
 import com.biasedbit.efflux.packet.CompoundControlPacket;
 import com.biasedbit.efflux.packet.ControlPacket;
 import com.biasedbit.efflux.packet.DataPacket;
 import com.biasedbit.efflux.participant.ParticipantDatabase;
 import com.biasedbit.efflux.participant.RtpParticipant;
 import com.biasedbit.efflux.participant.SingleParticipantDatabase;
-import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
-import org.jboss.netty.util.HashedWheelTimer;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.util.HashedWheelTimer;
+import io.netty.util.Timeout;
 
 /**
  * Implementation that only supports two participants, a local and the remote.
@@ -68,23 +81,13 @@ public class SingleParticipantSession extends AbstractRtpSession {
 
     public SingleParticipantSession(String id, int payloadType, RtpParticipant localParticipant,
                                     RtpParticipant remoteParticipant) {
-        this(id, payloadType, localParticipant, remoteParticipant, null, null);
+        this(id, payloadType, localParticipant, remoteParticipant, null);
     }
 
-    public SingleParticipantSession(String id, int payloadType, RtpParticipant localParticipant,
-                                    RtpParticipant remoteParticipant, OrderedMemoryAwareThreadPoolExecutor executor) {
-        this(id, payloadType, localParticipant, remoteParticipant, null, executor);
-    }
 
     public SingleParticipantSession(String id, int payloadType, RtpParticipant localParticipant,
                                     RtpParticipant remoteParticipant, HashedWheelTimer timer) {
-        this(id, payloadType, localParticipant, remoteParticipant, timer, null);
-    }
-
-    public SingleParticipantSession(String id, int payloadType, RtpParticipant localParticipant,
-                                    RtpParticipant remoteParticipant, HashedWheelTimer timer,
-                                    OrderedMemoryAwareThreadPoolExecutor executor) {
-        super(id, payloadType, localParticipant, timer, executor);
+        super(id, payloadType, localParticipant, timer);
         if (!remoteParticipant.isReceiver()) {
             throw new IllegalArgumentException("Remote participant must be a receiver (data & control addresses set)");
         }
@@ -94,6 +97,52 @@ public class SingleParticipantSession extends AbstractRtpSession {
         this.sendToLastOrigin = SEND_TO_LAST_ORIGIN;
         this.ignoreFromUnknownSsrc = IGNORE_FROM_UNKNOWN_SSRC;
     }
+
+    @Override
+    public boolean init(RtpDatasource datasource) throws Exception{
+        if (this.running.get()) {
+            return true;
+        }
+
+//        SocketAddress remote = new InetSocketAddress("192.168.1.108", 53063);
+
+        final RtpDatasourceHander datasourceHander = new RtpDatasourceHander(datasource);
+        EventLoopGroup group = new NioEventLoopGroup();
+        this.dataBootstrap = new Bootstrap();
+        this.dataBootstrap.group(group)
+                .channel(NioDatagramChannel.class)
+                .remoteAddress(this.receiver.getDataDestination())
+                .handler(new ChannelInitializer<DatagramChannel>() {
+
+                    @Override
+                    protected void initChannel(DatagramChannel ch) throws Exception {
+                        ch.pipeline().addLast("decoder", new DataPacketDecoder());
+                        ch.pipeline().addLast("encoder", DataPacketEncoder.getInstance());
+                        ch.pipeline().addLast("handler", new DataHandler(SingleParticipantSession.this));
+                        ch.pipeline().addLast("datasource", datasourceHander);
+                    }
+                })
+                .option(ChannelOption.SO_RCVBUF, this.receiveBufferSize)
+                .option(ChannelOption.SO_SNDBUF, this.sendBufferSize);
+
+        try {
+
+
+
+
+            ChannelFuture f = this.dataBootstrap.connect().sync();
+            f.channel().closeFuture().sync();
+
+            return true;
+        } finally {
+            group.shutdownGracefully().sync();
+            return false;
+        }
+
+
+    }
+
+
 
     // RtpSession -----------------------------------------------------------------------------------------------------
 
@@ -136,55 +185,8 @@ public class SingleParticipantSession extends AbstractRtpSession {
         return new SingleParticipantDatabase(this.id);
     }
 
-    @Override
-    protected void internalSendData(DataPacket packet) {
-        try {
-            // This assumes that the sender is sending is sending from the same ports where its expecting to receive.
-            // Can be dangerous if the other end fully respects the RFC and supports ICE, but this is nearly the only
-            // workaround that will work if the other end doesn't support ICE and is behind a NAT.
-            SocketAddress destination;
-            if (this.sendToLastOrigin && (this.receiver.getLastDataOrigin() != null)) {
-                destination = this.receiver.getLastDataOrigin();
-            } else {
-                destination = this.receiver.getDataDestination();
-            }
-            this.writeToData(packet, destination);
-            this.sentOrReceivedPackets.set(true);
-        } catch (Exception e) {
-            LOG.error("Failed to send {} to {} in session with id {}.", this.id, this.receiver.getInfo());
-        }
-    }
 
-    @Override
-    protected void internalSendControl(ControlPacket packet) {
-        try {
-            // This assumes that the sender is sending is sending from the same ports where its expecting to receive.
-            // Can be dangerous if the other end fully respects the RFC and supports ICE, but this is nearly the only
-            // workaround that will work if the other end doesn't support ICE and is behind a NAT.
-            SocketAddress destination;
-            if (this.sendToLastOrigin && (this.receiver.getLastControlOrigin() != null)) {
-                destination = this.receiver.getLastControlOrigin();
-            } else {
-                destination = this.receiver.getControlDestination();
-            }
-            this.writeToControl(packet, destination);
-            this.sentOrReceivedPackets.set(true);
-        } catch (Exception e) {
-            LOG.error("Failed to send RTCP packet to {} in session with id {}.",
-                      this.receiver.getInfo(), this.id);
-        }
-    }
 
-    @Override
-    protected void internalSendControl(CompoundControlPacket packet) {
-        try {
-            this.writeToControl(packet, this.receiver.getControlDestination());
-            this.sentOrReceivedPackets.set(true);
-        } catch (Exception e) {
-            LOG.error("Failed to send compound RTCP packet to {} in session with id {}.",
-                      this.receiver.getInfo(), this.id);
-        }
-    }
 
     // DataPacketReceiver ---------------------------------------------------------------------------------------------
 
@@ -230,4 +232,6 @@ public class SingleParticipantSession extends AbstractRtpSession {
         }
         this.ignoreFromUnknownSsrc = ignoreFromUnknownSsrc;
     }
+
+
 }
