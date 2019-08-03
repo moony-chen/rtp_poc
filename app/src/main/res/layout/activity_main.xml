@@ -55,4 +55,17 @@
             android:layout_height="wrap_content"
             android:text="Disconnect" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/volumeView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="volume: " />
+
+    <TextView
+        android:id="@+id/talkingView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Talking? " />
+
 </LinearLayout>
