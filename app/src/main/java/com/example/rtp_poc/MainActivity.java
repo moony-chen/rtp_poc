@@ -52,17 +52,10 @@ public class MainActivity extends AppCompatActivity {
     private static final int MY_PERMISSIONS_REQUEST_RECORD_AUDIO = 100;
 
     private static final String TAG = "MainActivity";
-    //指定音频源 这个和MediaRecorder是相同的 MediaRecorder.AudioSource.MIC指的是麦克风
-    private final int mAudioSource = MediaRecorder.AudioSource.MIC;
-    //指定采样率 （MediaRecoder 的采样率通常是8000Hz AAC的通常是44100Hz。 设置采样率为44100，目前为常用的采样率，官方文档表示这个值可以兼容所有的设置）
-    private int mSampleRate=16000 ;
-    //指定捕获音频的声道数目。在AudioFormat类中指定用于此的常量
-    private int mChannelConfig= AudioFormat.CHANNEL_IN_MONO; //单声道
-    //指定音频量化位数 ,在AudioFormaat类中指定了以下各种可能的常量。通常我们选择ENCODING_PCM_16BIT和ENCODING_PCM_8BIT PCM代表的是脉冲编码调制，它实际上是原始音频样本。
-    //因此可以设置每个样本的分辨率为16位或者8位，16位将占用更多的空间和处理能力,表示的音频也更加接近真实。
-    private int mAudioFormat=AudioFormat.ENCODING_PCM_16BIT;
-    private int bufferSize = 0;
-    private AudioRecord audioRecord;
+    private AudioSource audioSource;
+
+    private Observable<byte[]> audioStream$;
+
     private CompositeDisposable cd = new CompositeDisposable();
 
 
@@ -70,6 +63,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        this.audioSource = new AudioSource(this);
+        this.audioStream$ = audioSource.getAudioSource();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -80,13 +76,32 @@ public class MainActivity extends AppCompatActivity {
                         new String[]{Manifest.permission.RECORD_AUDIO},
                         MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
                 return;
+        } else {
+            audioSource.startAudio();
         }
 
-        startAudio();
+
+        findViewById(R.id.button1).setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                initRtc(audioStream$);
+            }
+        });
+
+        findViewById(R.id.button2).setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                audioSource.stopAudio();
+            }
+        });
 
 
 
-        Observable<Integer> volume$ = this.audioSource.subscribeOn(Schedulers.computation())
+
+
+        Observable<Integer> volume$ = this.audioStream$.subscribeOn(Schedulers.computation())
                 .map(new Function<byte[], Integer>() {
                     @Override
                     public Integer apply(byte[] bytes) throws Exception {
@@ -145,62 +160,8 @@ public class MainActivity extends AppCompatActivity {
 
 //    private  SingleParticipantSession session;
 
-    private void startAudio() {
-        // AudioRecord 得到录制最小缓冲区的大小
-        bufferSize = AudioRecord.getMinBufferSize(mSampleRate,
-                mChannelConfig,
-                mAudioFormat);
-        Log.d(TAG, "bufferSize" + bufferSize);
-//        bufferSize = 960;
-        // 实例化播放音频对象
-        audioRecord = new AudioRecord(mAudioSource, mSampleRate,
-                mChannelConfig,
-                mAudioFormat, bufferSize);
 
 
-        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
-        StrictMode.setThreadPolicy(policy);
-        try {
-            AudioManager audio =  (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
-
-
-
-
-//            InetAddress ia = InetAddress.getByAddress(getLocalIPAddress());
-
-//            ((TextView)findViewById(R.id.lblLocalPort)).setText(String.valueOf(localPort));
-            findViewById(R.id.button1).setOnClickListener(new View.OnClickListener() {
-
-                @Override
-                public void onClick(View v) {
-                    initRtc(MainActivity.this.audioSource);
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            send();
-                        }
-                    }, "AudioRecorder Thread").start();
-
-
-                }
-            });
-
-            ((Button) findViewById(R.id.button2)).setOnClickListener(new View.OnClickListener() {
-
-                @Override
-                public void onClick(View v) {
-                    stop();
-                }
-            });
-
-        } catch (Exception e) {
-            Log.e("----------------------", e.toString());
-            e.printStackTrace();
-        }
-    }
-
-    private PublishSubject<byte[]> audioSource = PublishSubject.create();
 
     private void initRtc(final Observable<byte[]> audioSource) {
         new Thread(new Runnable() {
@@ -231,19 +192,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    private void send() {
+//    private void send() {
 
 
 //        this.audioSource.onNext(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
-        audioRecord.startRecording();
-        byte[] buffer = new byte[bufferSize];
 
-
-        while (audioRecord.read(buffer, 0, bufferSize) > 0) {
-
-            this.audioSource.onNext(buffer);
-
-        }
 //
 //        mStreamAudioRecorder.start(new StreamAudioRecorder.AudioDataCallback() {
 //            @Override
@@ -271,25 +224,20 @@ public class MainActivity extends AppCompatActivity {
 //            }
 //        });
 
-    }
+//    }
 
-    public int getValidSampleRates() {
-        for (int rate : new int[] {16000, 8000}) {  // add the rates you wish to check against
-            int bufferSize = AudioRecord.getMinBufferSize(rate, mChannelConfig, AudioFormat.ENCODING_PCM_16BIT);
-            if (bufferSize > 0) {
-                return bufferSize;
+//    public int getValidSampleRates() {
+//        for (int rate : new int[] {16000, 8000}) {  // add the rates you wish to check against
+//            int bufferSize = AudioRecord.getMinBufferSize(rate, mChannelConfig, AudioFormat.ENCODING_PCM_16BIT);
+//            if (bufferSize > 0) {
+//                return bufferSize;
+//
+//            }
+//        }
+//        return 0;
+//    }
 
-            }
-        }
-        return 0;
-    }
-
-    private void stop() {
-        audioRecord.stop();
-//        audioRecord.release();
-//        session.terminate();
-    }
-
+/*
     private byte[] getLocalIPAddress() {
         byte[] bytes = null;
 
@@ -318,7 +266,7 @@ public class MainActivity extends AppCompatActivity {
 
         return bytes;
     }
-
+*/
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String[] permissions, int[] grantResults) {
@@ -329,7 +277,7 @@ public class MainActivity extends AppCompatActivity {
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // permission was granted, yay! Do the
                     // contacts-related task you need to do.
-                    startAudio();
+                    audioSource.startAudio();
                 } else {
                     // permission denied, boo! Disable the
                     // functionality that depends on this permission.
