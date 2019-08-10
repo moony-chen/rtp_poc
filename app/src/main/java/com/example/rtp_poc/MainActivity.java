@@ -44,6 +44,7 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.BiFunction;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
+import io.reactivex.functions.Function3;
 import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
@@ -87,21 +88,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
 
-        findViewById(R.id.button1).setOnClickListener(new View.OnClickListener() {
 
-            @Override
-            public void onClick(View v) {
-                initRtc(audioStream$);
-            }
-        });
-
-        findViewById(R.id.button2).setOnClickListener(new View.OnClickListener() {
-
-            @Override
-            public void onClick(View v) {
-                audioSource.stopRecording();
-            }
-        });
 
 
 
@@ -148,6 +135,14 @@ public class MainActivity extends AppCompatActivity {
                 )
                 .startWith("");
 
+        Observable<byte[]> conversation$ = Observable.combineLatest(this.audioStream$, awake$, talking$, new Function3<byte[], String, Boolean, byte[]>() {
+            @Override
+            public byte[] apply(byte[] bytes, String s, Boolean talking) throws Exception {
+                if (s.equals("go") && talking) return bytes;
+                return new byte[0];
+            }
+        }).filter(b-> b.length > 0);
+
 
         final TextView volumeView = findViewById(R.id.volumeView);
         cd.add(
@@ -180,10 +175,27 @@ public class MainActivity extends AppCompatActivity {
                 .subscribe(new Consumer<String>() {
                     @Override
                     public void accept(String awake) throws Exception {
-                        awakeView.setText(String.format(Locale.US, "Awake: %s", awake.equals("go")? "Yes" : "No, say 'go' to wake me"));
+                        awakeView.setText(String.format(Locale.US, "Awake: %s", awake.equals("go")? "Yes" : "No, say 'go' to wake me up"));
                     }
                 })
         );
+
+
+        findViewById(R.id.button1).setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                initRtc(conversation$);
+            }
+        });
+
+        findViewById(R.id.button2).setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                audioSource.stopRecording();
+            }
+        });
 
 
     }
