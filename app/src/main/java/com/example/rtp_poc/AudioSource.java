@@ -16,6 +16,9 @@ public class AudioSource {
 
     private static final String TAG = "AudioSource";
 
+    private Thread recordingThread;
+    boolean shouldContinue = true;
+
     //指定音频源 这个和MediaRecorder是相同的 MediaRecorder.AudioSource.MIC指的是麦克风
     private final int mAudioSource = MediaRecorder.AudioSource.MIC;
     //指定采样率 （MediaRecoder 的采样率通常是8000Hz AAC的通常是44100Hz。 设置采样率为44100，目前为常用的采样率，官方文档表示这个值可以兼容所有的设置）
@@ -43,45 +46,70 @@ public class AudioSource {
 
 
 
-    public void startAudio() {
-        // AudioRecord 得到录制最小缓冲区的大小
-        bufferSize = AudioRecord.getMinBufferSize(mSampleRate,
-                mChannelConfig,
-                mAudioFormat);
-        Log.d(TAG, "bufferSize" + bufferSize);
-//        bufferSize = 960;
-        // 实例化播放音频对象
-        audioRecord = new AudioRecord(mAudioSource, mSampleRate,
-                mChannelConfig,
-                mAudioFormat, bufferSize);
+    public synchronized void startRecording() {
+        if (recordingThread != null) {
+            return;
+        }
+        shouldContinue = true;
+        recordingThread =
+                new Thread(
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                record();
+                            }
+                        }, "AudioRecorder Thread");
+        recordingThread.start();
+    }
+
+    public synchronized void stopRecording() {
+        if (recordingThread == null) {
+            return;
+        }
+        shouldContinue = false;
+        recordingThread = null;
+    }
+
+    private void record() {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO);
         StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
         StrictMode.setThreadPolicy(policy);
         AudioManager audio =  (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
 
-        try {
-            audioRecord.startRecording();
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-
-                    byte[] buffer = new byte[bufferSize];
-                    while (audioRecord.read(buffer, 0, bufferSize) > 0) {
-                        AudioSource.this.audioSource.onNext(buffer);
-                    }
-                }
-            }, "AudioRecorder Thread").start();
-
-
-        } catch (Exception e) {
-            Log.e("----------------------", e.toString());
-            e.printStackTrace();
+        bufferSize = AudioRecord.getMinBufferSize(mSampleRate,
+                mChannelConfig,
+                mAudioFormat);
+        Log.d(TAG, "bufferSize" + bufferSize);
+        if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
+            bufferSize = mSampleRate * 2;
         }
-    }
+        byte[] audioBuffer = new byte[bufferSize];
+//        bufferSize = 960;
+        // 实例化播放音频对象
+        audioRecord = new AudioRecord(mAudioSource, mSampleRate,
+                mChannelConfig,
+                mAudioFormat, bufferSize);
 
-    public void stopAudio() {
+        if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "Audio Record can't initialize!");
+            return;
+        }
+
+        audioRecord.startRecording();
+        while (shouldContinue) {
+            int numberRead = audioRecord.read(audioBuffer, 0, audioBuffer.length);
+            if (numberRead > 0) {
+                byte[] next = new byte[numberRead];
+                System.arraycopy(audioBuffer, 0, next, 0, numberRead);
+                AudioSource.this.audioSource.onNext(next);
+            }
+
+        }
         audioRecord.stop();
         audioRecord.release();
+
+
     }
 
 }

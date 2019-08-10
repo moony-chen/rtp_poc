@@ -68,4 +68,10 @@
         android:layout_height="wrap_content"
         android:text="Talking? " />
 
+    <TextView
+        android:id="@+id/awakeView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Awake? " />
+
 </LinearLayout>

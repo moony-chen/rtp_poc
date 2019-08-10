@@ -44,6 +44,7 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.BiFunction;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
+import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 
@@ -55,6 +56,8 @@ public class MainActivity extends AppCompatActivity {
     private AudioSource audioSource;
 
     private Observable<byte[]> audioStream$;
+    private AudioCommand audioCommand;
+    private Observable<String> commandStream$;
 
     private CompositeDisposable cd = new CompositeDisposable();
 
@@ -66,6 +69,8 @@ public class MainActivity extends AppCompatActivity {
 
         this.audioSource = new AudioSource(this);
         this.audioStream$ = audioSource.getAudioSource();
+        this.audioCommand = new AudioCommand(this, this.audioStream$);
+        this.commandStream$ = this.audioCommand.aWakeStream;
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -77,7 +82,8 @@ public class MainActivity extends AppCompatActivity {
                         MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
                 return;
         } else {
-            audioSource.startAudio();
+            audioSource.startRecording();
+            audioCommand.startRecognition();
         }
 
 
@@ -93,11 +99,9 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onClick(View v) {
-                audioSource.stopAudio();
+                audioSource.stopRecording();
             }
         });
-
-
 
 
 
@@ -108,49 +112,75 @@ public class MainActivity extends AppCompatActivity {
                         return calculateVolume(bytes, 16);
                     }
                 });
-
-        cd.add(
-                volume$
-                .subscribeOn(AndroidSchedulers.mainThread())
-                .subscribe(new Consumer<Integer>() {
-                    @Override
-                    public void accept(Integer integer) throws Exception {
-                        TextView volumeView = findViewById(R.id.volumeView);
-                        volumeView.setText(String.format(Locale.US, "Volume: %d", integer));
-                    }
-                })
-        );
-
-        cd.add(
-                volume$
+        Observable<Boolean> talking$ = volume$
                 .map(new Function<Integer, Integer>() {
                     @Override
                     public Integer apply(Integer integer) throws Exception {
                         return integer > 0 ? 1 : 0;
                     }
                 })
-                        .scan(1, new BiFunction<Integer, Integer, Integer>() {
-                            @Override
-                            public Integer apply(Integer acc, Integer value) throws Exception {
-                                if (value == 1) return 0;
-                                else return acc + 1;
-                            }
-                        })
-                        .scan(false, new BiFunction<Boolean, Integer, Boolean>() {
-                            @Override
-                            public Boolean apply(Boolean aBoolean, Integer integer) throws Exception {
-                                if (integer == 0) return true;
-                                else return  (aBoolean && integer < 32);
-                                // 32: threshold, if lasts about 2 seconds of no talk, consider user no longer speaks
-                            }
-                        })
+                .scan(1, new BiFunction<Integer, Integer, Integer>() {
+                    @Override
+                    public Integer apply(Integer acc, Integer value) throws Exception {
+                        if (value == 1) return 0;
+                        else return acc + 1;
+                    }
+                })
+                .scan(false, new BiFunction<Boolean, Integer, Boolean>() {
+                    @Override
+                    public Boolean apply(Boolean aBoolean, Integer integer) throws Exception {
+                        if (integer == 0) return true;
+                        else return  (aBoolean && integer < 32);
+                        // 32: threshold, if lasts about 2 seconds of no talk, consider user no longer speaks
+                    }
+                });
+        Observable<String> awake$ = this.commandStream$
+                .observeOn(Schedulers.io())
 
+                .doOnNext(n -> Log.d(TAG, "Command " + n))
+                .filter(comm -> comm.equals("go"))
+                .switchMap(c -> Observable.timer(4, TimeUnit.SECONDS).map(new Function<Long, String>() {
+                    @Override
+                    public String apply(Long aLong) throws Exception {
+                        return "";
+                    }
+                }).startWith(c)
+                )
+                .startWith("");
+
+
+        final TextView volumeView = findViewById(R.id.volumeView);
+        cd.add(
+                volume$
+                .subscribeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<Integer>() {
+                    @Override
+                    public void accept(Integer integer) throws Exception {
+
+                        volumeView.setText(String.format(Locale.US, "Volume: %d", integer));
+                    }
+                })
+        );
+
+        final TextView talkingView = findViewById(R.id.talkingView);
+        cd.add(
+                talking$
                 .subscribeOn(AndroidSchedulers.mainThread())
                 .subscribe(new Consumer<Boolean>() {
                     @Override
                     public void accept(Boolean talking) throws Exception {
-                        TextView volumeView = findViewById(R.id.talkingView);
-                        volumeView.setText(String.format(Locale.US, "Talking: %s", talking? "Yes" : "No"));
+                        talkingView.setText(String.format(Locale.US, "Talking: %s", talking? "Yes" : "No"));
+                    }
+                })
+        );
+
+        final TextView awakeView = findViewById(R.id.awakeView);
+        cd.add(
+                awake$.observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<String>() {
+                    @Override
+                    public void accept(String awake) throws Exception {
+                        awakeView.setText(String.format(Locale.US, "Awake: %s", awake.equals("go")? "Yes" : "No, say 'go' to wake me"));
                     }
                 })
         );
@@ -277,7 +307,8 @@ public class MainActivity extends AppCompatActivity {
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // permission was granted, yay! Do the
                     // contacts-related task you need to do.
-                    audioSource.startAudio();
+                    audioSource.startRecording();
+                    audioCommand.startRecognition();
                 } else {
                     // permission denied, boo! Disable the
                     // functionality that depends on this permission.
