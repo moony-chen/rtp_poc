@@ -29,7 +29,7 @@ public class Main {
         dp.setPayloadType(1);
         dp.setSequenceNumber(1);
         dp.setData(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
-//        session.sendDataPacket(dp);
+        session.sendDataPacket(dp);
         Thread.sleep(2000);
     }
 }

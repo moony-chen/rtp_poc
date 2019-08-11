@@ -84,8 +84,8 @@ public abstract class AbstractRtpSession implements RtpSession {
     protected static final boolean USE_NIO = true;
     protected static final boolean DISCARD_OUT_OF_ORDER = true;
     protected static final int BANDWIDTH_LIMIT = 256;
-    protected static final int SEND_BUFFER_SIZE = 1500;
-    protected static final int RECEIVE_BUFFER_SIZE = 1500;
+    protected static final int SEND_BUFFER_SIZE = 1024;
+    protected static final int RECEIVE_BUFFER_SIZE = 1024;
     protected static final int MAX_COLLISIONS_BEFORE_CONSIDERING_LOOP = 3;
     protected static final boolean AUTOMATED_RTCP_HANDLING = true;
     protected static final boolean TRY_TO_UPDATE_ON_EVERY_SDES = true;
@@ -185,83 +185,6 @@ public abstract class AbstractRtpSession implements RtpSession {
     @Override
     public int getPayloadType() {
         return this.payloadType;
-    }
-
-
-
-    public class RtpDatasourceHander extends SimpleChannelInboundHandler {
-
-        private io.reactivex.Observable<byte[]> datasource;
-        private Disposable disposable;
-
-
-        public RtpDatasourceHander(io.reactivex.Observable<byte[]> datasource) {
-            super(true);
-            this.datasource = datasource;
-        }
-
-        @Override
-        public void channelActive(final ChannelHandlerContext ctx) throws Exception {
-            running.set(true);
-//            ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
-            datasource
-//                    .subscribeOn(Schedulers.io())
-                    .subscribe(new Observer<byte[]>() {
-                @Override
-                public void onSubscribe(Disposable d) {
-                    disposable = d;
-                }
-
-                @Override
-                public void onNext(byte[] o) {
-                    ctx.writeAndFlush(wrapData(o, new Date().getTime()));
-//                    ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
-                }
-
-                @Override
-                public void onError(Throwable e) {
-
-                }
-
-                @Override
-                public void onComplete() {
-//                ctx.channel().closeFuture().sync();
-                }
-            });
-
-        }
-
-        @Override
-        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            running.set(false);
-            if(disposable!=null && !disposable.isDisposed()) disposable.dispose();
-        }
-
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
-
-        }
-    }
-
-//    @Override
-//    public void terminate() {
-//        this.terminate(RtpSessionEventListener.TERMINATE_CALLED);
-//    }
-
-    DataPacket wrapData(byte[] data, long timestamp) {
-        if (!this.running.get()) {
-            return null;
-        }
-
-        DataPacket packet = new DataPacket();
-        // Other fields will be set by sendDataPacket()
-        packet.setTimestamp(timestamp);
-        packet.setData(data);
-        packet.setPayloadType(this.payloadType);
-        packet.setSsrc(this.localParticipant.getSsrc());
-        packet.setSequenceNumber(this.sequence.incrementAndGet());
-        return packet;
-
     }
 
 

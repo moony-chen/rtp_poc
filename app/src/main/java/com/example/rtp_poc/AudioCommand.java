@@ -80,6 +80,15 @@ public class AudioCommand {
             throw new RuntimeException("Problem reading label file!", e);
         }
 
+//        labels.add("UNK");
+//        labels.add("孙小空");
+//        labels.add("上一首");
+//        labels.add("下一首");
+//        labels.add("播放");
+//        labels.add("停止播放");
+
+//        inferenceInterface = new TensorFlowInferenceInterface(ContextContainer.getContext().getAssets(), MODEL_FILENAME);
+
         String actualModelFilename = MODEL_FILENAME.split("file:///android_asset/", -1)[1];
         Log.i(LOG_TAG, "Reading model from: " + actualModelFilename);
         try {
@@ -151,7 +160,7 @@ public class AudioCommand {
         tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
 
         float[] result = outputScores[0];
-        Log.d(LOG_TAG, Arrays.toString(result));
+//        Log.d(LOG_TAG, Arrays.toString(result));
 
         int goCommand = 11;
         float max = 0;

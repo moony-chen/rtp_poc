@@ -32,6 +32,7 @@ import com.biasedbit.efflux.session.SingleParticipantSession;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -124,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
         Observable<String> awake$ = this.commandStream$
                 .observeOn(Schedulers.io())
 
-                .doOnNext(n -> Log.d(TAG, "Command " + n))
+//                .doOnNext(n -> Log.d(TAG, "Command " + n))
                 .filter(comm -> comm.equals("go"))
                 .switchMap(c -> Observable.timer(4, TimeUnit.SECONDS).map(new Function<Long, String>() {
                     @Override
@@ -185,7 +186,30 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onClick(View v) {
-                initRtc(conversation$);
+                LinkedList<byte[]> data = new LinkedList<>();
+                AudioReceiver receiver = new AudioReceiver();
+
+                AudioSender sender = AudioSender.getInstance(initRtc(receiver));
+
+                cd.add(
+                audioStream$.subscribeOn(Schedulers.io())
+                        .subscribe(new Consumer<byte[]>() {
+                            @Override
+                            public void accept(byte[] bytes) throws Exception {
+                                data.offer(bytes);
+                            }
+                        })
+                );
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+
+                        sender.send(data);
+                    }
+                }, "").start();
+
+//                initRtc(conversation$);
             }
         });
 
@@ -205,30 +229,32 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private void initRtc(final Observable<byte[]> audioSource) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
+    private RtpSession initRtc(AudioReceiver receiver) {
+//        new Thread(new Runnable() {
+//            @Override
+//            public void run() {
                 String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
                 String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
 
-                RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 12345, 11113);
+                RtpParticipant localP = RtpParticipant.createReceiver("10.0.2.9", 12345, 11113);
                 RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
                 RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
                 session.addDataListener(new RtpSessionDataListener() {
                     @Override
                     public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
+                        receiver.receive(packet.getDataAsArray());
                         Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
                     }
                 });
                 try {
-                    session.init(audioSource);
+                    session.init();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-            }
-        }, "RTC thread").start();
+                return session;
+//            }
+//        }, "RTC thread").start();
 
 
     }

@@ -46,6 +46,8 @@ public class DataPacketDecoder extends MessageToMessageDecoder<ByteBuf> {
         }
     }
 
-
-
+    @Override
+    public boolean acceptInboundMessage(Object msg) throws Exception {
+        return true;
+    }
 }

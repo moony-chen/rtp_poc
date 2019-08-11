@@ -59,7 +59,10 @@ public class DataHandler extends SimpleChannelInboundHandler<DataPacket> {
         LOG.error("Caught exception on channel {}.", cause, ctx.channel());
     }
 
-
+    @Override
+    public boolean acceptInboundMessage(Object msg) throws Exception {
+        return true;
+    }
 
     // public methods -------------------------------------------------------------------------------------------------
 
