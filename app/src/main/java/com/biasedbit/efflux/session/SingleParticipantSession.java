@@ -44,6 +44,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
+import io.netty.handler.codec.DatagramPacketDecoder;
+import io.netty.handler.codec.DatagramPacketEncoder;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timeout;
 
@@ -121,8 +123,8 @@ public class SingleParticipantSession extends AbstractRtpSession {
 
                     @Override
                     protected void initChannel(DatagramChannel ch) throws Exception {
-                        ch.pipeline().addLast("decoder", new DataPacketDecoder());
-                        ch.pipeline().addLast("encoder", DataPacketEncoder.getInstance());
+                        ch.pipeline().addLast("decoder", new DatagramPacketDecoder(new DataPacketDecoder()));
+                        ch.pipeline().addLast("encoder", new DatagramPacketEncoder<>(DataPacketEncoder.getInstance()));
                         ch.pipeline().addLast("handler", new DataHandler(SingleParticipantSession.this));
                     }
                 })
