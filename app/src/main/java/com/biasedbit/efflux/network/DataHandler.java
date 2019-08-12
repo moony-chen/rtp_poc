@@ -61,7 +61,7 @@ public class DataHandler extends SimpleChannelInboundHandler<DataPacket> {
 
     @Override
     public boolean acceptInboundMessage(Object msg) throws Exception {
-        return true;
+        return super.acceptInboundMessage(msg);
     }
 
     // public methods -------------------------------------------------------------------------------------------------

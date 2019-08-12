@@ -124,8 +124,8 @@ public class SingleParticipantSession extends AbstractRtpSession {
                     @Override
                     protected void initChannel(DatagramChannel ch) throws Exception {
                         ch.pipeline().addLast("decoder", new DatagramPacketDecoder(new DataPacketDecoder()));
-                        ch.pipeline().addLast("encoder", new DatagramPacketEncoder<>(DataPacketEncoder.getInstance()));
                         ch.pipeline().addLast("handler", new DataHandler(SingleParticipantSession.this));
+                        ch.pipeline().addLast("encoder", DataPacketEncoder.getInstance());
                     }
                 })
                 .option(ChannelOption.SO_RCVBUF, this.receiveBufferSize)
@@ -186,7 +186,7 @@ public class SingleParticipantSession extends AbstractRtpSession {
     }
 
     @Override
-    public void terminate() {
+    public void terminate(Throwable throwable) {
         try {
             this.running.set(false);
             channel.closeFuture().sync();
@@ -245,15 +245,15 @@ public class SingleParticipantSession extends AbstractRtpSession {
 
     @Override
     public void dataPacketReceived(SocketAddress origin, DataPacket packet) {
-        if (!this.receivedPackets.getAndSet(true)) {
-            // If this is the first packet then setup the SSRC for this participant (we didn't know it yet).
-            this.receiver.getInfo().setSsrc(packet.getSsrc());
-            LOG.trace("First packet received from remote source, updated SSRC to {}.", packet.getSsrc());
-        } else if (this.ignoreFromUnknownSsrc && (packet.getSsrc() != this.receiver.getInfo().getSsrc())) {
-            LOG.trace("Discarded packet from unexpected SSRC: {} (expected was {}).",
-                      packet.getSsrc(), this.receiver.getInfo().getSsrc());
-            return;
-        }
+//        if (!this.receivedPackets.getAndSet(true)) {
+//            // If this is the first packet then setup the SSRC for this participant (we didn't know it yet).
+//            this.receiver.getInfo().setSsrc(packet.getSsrc());
+//            LOG.trace("First packet received from remote source, updated SSRC to {}.", packet.getSsrc());
+//        } else if (this.ignoreFromUnknownSsrc && (packet.getSsrc() != this.receiver.getInfo().getSsrc())) {
+//            LOG.trace("Discarded packet from unexpected SSRC: {} (expected was {}).",
+//                      packet.getSsrc(), this.receiver.getInfo().getSsrc());
+//            return;
+//        }
 
         super.dataPacketReceived(origin, packet);
     }

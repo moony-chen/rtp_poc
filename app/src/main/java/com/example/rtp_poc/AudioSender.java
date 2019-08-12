@@ -36,12 +36,12 @@ public class AudioSender {
             if (audio_q.size() > 0) {
                 data = audio_q.poll();
 //                Log.d("AudioSender", Arrays.toString(data));
-                try {
+//                try {
                     session.sendData(data, new Date().getTime());
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+//                    Thread.sleep(10000);
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
 
             }
 //            }

@@ -63,6 +63,22 @@ public class MainActivity extends AppCompatActivity {
 
     private CompositeDisposable cd = new CompositeDisposable();
 
+    class PlaySound implements Runnable
+    {
+
+        private LinkedList<byte[]> stream;
+        public PlaySound(LinkedList<byte[]> stream) {
+            this.stream = stream;
+        }
+        @Override
+        public void run()
+        {
+            AudioPlayer player = AudioPlayer.getInstance();
+            player.init();
+            player.play(this.stream);
+        }
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -207,7 +223,9 @@ public class MainActivity extends AppCompatActivity {
 
                         sender.send(data);
                     }
-                }, "").start();
+                }, "Sender").start();
+
+                new Thread(new PlaySound(receiver.receive()), "Player").start();
 
 //                initRtc(conversation$);
             }
@@ -220,6 +238,10 @@ public class MainActivity extends AppCompatActivity {
                 audioSource.stopRecording();
             }
         });
+
+
+
+
 
 
     }
@@ -240,13 +262,8 @@ public class MainActivity extends AppCompatActivity {
                 RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
                 RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
-                session.addDataListener(new RtpSessionDataListener() {
-                    @Override
-                    public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-                        receiver.receive(packet.getDataAsArray());
-                        Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
-                    }
-                });
+                session.addReceiver(remoteP);
+                session.addDataListener(receiver);
                 try {
                     session.init();
                 } catch (Exception e) {
