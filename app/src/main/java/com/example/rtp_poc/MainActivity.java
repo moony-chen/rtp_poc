@@ -32,6 +32,7 @@ import com.biasedbit.efflux.session.SingleParticipantSession;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -44,6 +45,8 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.BiFunction;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
+import io.reactivex.functions.Function3;
+import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 
@@ -52,24 +55,40 @@ public class MainActivity extends AppCompatActivity {
     private static final int MY_PERMISSIONS_REQUEST_RECORD_AUDIO = 100;
 
     private static final String TAG = "MainActivity";
-    //指定音频源 这个和MediaRecorder是相同的 MediaRecorder.AudioSource.MIC指的是麦克风
-    private final int mAudioSource = MediaRecorder.AudioSource.MIC;
-    //指定采样率 （MediaRecoder 的采样率通常是8000Hz AAC的通常是44100Hz。 设置采样率为44100，目前为常用的采样率，官方文档表示这个值可以兼容所有的设置）
-    private int mSampleRate=16000 ;
-    //指定捕获音频的声道数目。在AudioFormat类中指定用于此的常量
-    private int mChannelConfig= AudioFormat.CHANNEL_IN_MONO; //单声道
-    //指定音频量化位数 ,在AudioFormaat类中指定了以下各种可能的常量。通常我们选择ENCODING_PCM_16BIT和ENCODING_PCM_8BIT PCM代表的是脉冲编码调制，它实际上是原始音频样本。
-    //因此可以设置每个样本的分辨率为16位或者8位，16位将占用更多的空间和处理能力,表示的音频也更加接近真实。
-    private int mAudioFormat=AudioFormat.ENCODING_PCM_16BIT;
-    private int bufferSize = 0;
-    private AudioRecord audioRecord;
+    private AudioSource audioSource;
+
+    private Observable<byte[]> audioStream$;
+    private AudioCommand audioCommand;
+    private Observable<String> commandStream$;
+
     private CompositeDisposable cd = new CompositeDisposable();
+
+    class PlaySound implements Runnable
+    {
+
+        private LinkedList<byte[]> stream;
+        public PlaySound(LinkedList<byte[]> stream) {
+            this.stream = stream;
+        }
+        @Override
+        public void run()
+        {
+            AudioPlayer player = AudioPlayer.getInstance();
+            player.init();
+            player.play(this.stream);
+        }
+    }
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        this.audioSource = new AudioSource(this);
+        this.audioStream$ = audioSource.getAudioSource();
+        this.audioCommand = new AudioCommand(this, this.audioStream$);
+        this.commandStream$ = this.audioCommand.aWakeStream;
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -80,170 +99,189 @@ public class MainActivity extends AppCompatActivity {
                         new String[]{Manifest.permission.RECORD_AUDIO},
                         MY_PERMISSIONS_REQUEST_RECORD_AUDIO);
                 return;
+        } else {
+            audioSource.startRecording();
+            audioCommand.startRecognition();
         }
 
-        startAudio();
 
 
 
-        Observable<Integer> volume$ = this.audioSource.subscribeOn(Schedulers.computation())
+
+
+        Observable<Integer> volume$ = this.audioStream$.subscribeOn(Schedulers.computation())
                 .map(new Function<byte[], Integer>() {
                     @Override
                     public Integer apply(byte[] bytes) throws Exception {
                         return calculateVolume(bytes, 16);
                     }
                 });
-
-        cd.add(
-                volume$
-                .subscribeOn(AndroidSchedulers.mainThread())
-                .subscribe(new Consumer<Integer>() {
-                    @Override
-                    public void accept(Integer integer) throws Exception {
-                        TextView volumeView = findViewById(R.id.volumeView);
-                        volumeView.setText(String.format(Locale.US, "Volume: %d", integer));
-                    }
-                })
-        );
-
-        cd.add(
-                volume$
+        Observable<Boolean> talking$ = volume$
                 .map(new Function<Integer, Integer>() {
                     @Override
                     public Integer apply(Integer integer) throws Exception {
                         return integer > 0 ? 1 : 0;
                     }
                 })
-                        .scan(1, new BiFunction<Integer, Integer, Integer>() {
-                            @Override
-                            public Integer apply(Integer acc, Integer value) throws Exception {
-                                if (value == 1) return 0;
-                                else return acc + 1;
-                            }
-                        })
-                        .scan(false, new BiFunction<Boolean, Integer, Boolean>() {
-                            @Override
-                            public Boolean apply(Boolean aBoolean, Integer integer) throws Exception {
-                                if (integer == 0) return true;
-                                else return  (aBoolean && integer < 32);
-                                // 32: threshold, if lasts about 2 seconds of no talk, consider user no longer speaks
-                            }
-                        })
+                .scan(1, new BiFunction<Integer, Integer, Integer>() {
+                    @Override
+                    public Integer apply(Integer acc, Integer value) throws Exception {
+                        if (value == 1) return 0;
+                        else return acc + 1;
+                    }
+                })
+                .scan(false, new BiFunction<Boolean, Integer, Boolean>() {
+                    @Override
+                    public Boolean apply(Boolean aBoolean, Integer integer) throws Exception {
+                        if (integer == 0) return true;
+                        else return  (aBoolean && integer < 32);
+                        // 32: threshold, if lasts about 2 seconds of no talk, consider user no longer speaks
+                    }
+                });
+        Observable<String> awake$ = this.commandStream$
+                .observeOn(Schedulers.io())
 
+//                .doOnNext(n -> Log.d(TAG, "Command " + n))
+                .filter(comm -> comm.equals("go"))
+                .switchMap(c -> Observable.timer(4, TimeUnit.SECONDS).map(new Function<Long, String>() {
+                    @Override
+                    public String apply(Long aLong) throws Exception {
+                        return "";
+                    }
+                }).startWith(c)
+                )
+                .startWith("");
+
+        Observable<byte[]> conversation$ = Observable.combineLatest(this.audioStream$, awake$, talking$, new Function3<byte[], String, Boolean, byte[]>() {
+            @Override
+            public byte[] apply(byte[] bytes, String s, Boolean talking) throws Exception {
+                if (s.equals("go") && talking) return bytes;
+                return new byte[0];
+            }
+        }).filter(b-> b.length > 0);
+
+
+        final TextView volumeView = findViewById(R.id.volumeView);
+        cd.add(
+                volume$
+                .subscribeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<Integer>() {
+                    @Override
+                    public void accept(Integer integer) throws Exception {
+
+                        volumeView.setText(String.format(Locale.US, "Volume: %d", integer));
+                    }
+                })
+        );
+
+        final TextView talkingView = findViewById(R.id.talkingView);
+        cd.add(
+                talking$
                 .subscribeOn(AndroidSchedulers.mainThread())
                 .subscribe(new Consumer<Boolean>() {
                     @Override
                     public void accept(Boolean talking) throws Exception {
-                        TextView volumeView = findViewById(R.id.talkingView);
-                        volumeView.setText(String.format(Locale.US, "Talking: %s", talking? "Yes" : "No"));
+                        talkingView.setText(String.format(Locale.US, "Talking: %s", talking? "Yes" : "No"));
                     }
                 })
         );
+
+        final TextView awakeView = findViewById(R.id.awakeView);
+        cd.add(
+                awake$.observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<String>() {
+                    @Override
+                    public void accept(String awake) throws Exception {
+                        awakeView.setText(String.format(Locale.US, "Awake: %s", awake.equals("go")? "Yes" : "No, say 'go' to wake me up"));
+                    }
+                })
+        );
+
+
+        findViewById(R.id.button1).setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                LinkedList<byte[]> data = new LinkedList<>();
+                AudioReceiver receiver = new AudioReceiver();
+
+                AudioSender sender = AudioSender.getInstance(initRtc(receiver));
+
+                cd.add(
+                audioStream$.subscribeOn(Schedulers.io())
+                        .subscribe(new Consumer<byte[]>() {
+                            @Override
+                            public void accept(byte[] bytes) throws Exception {
+                                data.offer(bytes);
+                            }
+                        })
+                );
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+
+                        sender.send(data);
+                    }
+                }, "Sender").start();
+
+                new Thread(new PlaySound(receiver.receive()), "Player").start();
+
+//                initRtc(conversation$);
+            }
+        });
+
+        findViewById(R.id.button2).setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                audioSource.stopRecording();
+            }
+        });
+
+
+
+
 
 
     }
 
 //    private  SingleParticipantSession session;
 
-    private void startAudio() {
-        // AudioRecord 得到录制最小缓冲区的大小
-        bufferSize = AudioRecord.getMinBufferSize(mSampleRate,
-                mChannelConfig,
-                mAudioFormat);
-        Log.d(TAG, "bufferSize" + bufferSize);
-//        bufferSize = 960;
-        // 实例化播放音频对象
-        audioRecord = new AudioRecord(mAudioSource, mSampleRate,
-                mChannelConfig,
-                mAudioFormat, bufferSize);
-
-
-        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
-        StrictMode.setThreadPolicy(policy);
-        try {
-            AudioManager audio =  (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
 
 
 
-
-//            InetAddress ia = InetAddress.getByAddress(getLocalIPAddress());
-
-//            ((TextView)findViewById(R.id.lblLocalPort)).setText(String.valueOf(localPort));
-            findViewById(R.id.button1).setOnClickListener(new View.OnClickListener() {
-
-                @Override
-                public void onClick(View v) {
-                    initRtc(MainActivity.this.audioSource);
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            send();
-                        }
-                    }, "AudioRecorder Thread").start();
-
-
-                }
-            });
-
-            ((Button) findViewById(R.id.button2)).setOnClickListener(new View.OnClickListener() {
-
-                @Override
-                public void onClick(View v) {
-                    stop();
-                }
-            });
-
-        } catch (Exception e) {
-            Log.e("----------------------", e.toString());
-            e.printStackTrace();
-        }
-    }
-
-    private PublishSubject<byte[]> audioSource = PublishSubject.create();
-
-    private void initRtc(final Observable<byte[]> audioSource) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
+    private RtpSession initRtc(AudioReceiver receiver) {
+//        new Thread(new Runnable() {
+//            @Override
+//            public void run() {
                 String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
                 String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
 
-                RtpParticipant localP = RtpParticipant.createReceiver("127.0.0.1", 12345, 11113);
+                RtpParticipant localP = RtpParticipant.createReceiver("10.0.2.9", 12345, 11113);
                 RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
                 RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
-                session.addDataListener(new RtpSessionDataListener() {
-                    @Override
-                    public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-                        Logger.getLogger(MainActivity.class).debug(packet.getDataAsArray().toString());
-                    }
-                });
+                session.addReceiver(remoteP);
+                session.addDataListener(receiver);
                 try {
-                    session.init(audioSource);
+                    session.init();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-            }
-        }, "RTC thread").start();
+                return session;
+//            }
+//        }, "RTC thread").start();
 
 
     }
 
 
-    private void send() {
+//    private void send() {
 
 
 //        this.audioSource.onNext(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
-        audioRecord.startRecording();
-        byte[] buffer = new byte[bufferSize];
 
-
-        while (audioRecord.read(buffer, 0, bufferSize) > 0) {
-
-            this.audioSource.onNext(buffer);
-
-        }
 //
 //        mStreamAudioRecorder.start(new StreamAudioRecorder.AudioDataCallback() {
 //            @Override
@@ -271,25 +309,20 @@ public class MainActivity extends AppCompatActivity {
 //            }
 //        });
 
-    }
+//    }
 
-    public int getValidSampleRates() {
-        for (int rate : new int[] {16000, 8000}) {  // add the rates you wish to check against
-            int bufferSize = AudioRecord.getMinBufferSize(rate, mChannelConfig, AudioFormat.ENCODING_PCM_16BIT);
-            if (bufferSize > 0) {
-                return bufferSize;
+//    public int getValidSampleRates() {
+//        for (int rate : new int[] {16000, 8000}) {  // add the rates you wish to check against
+//            int bufferSize = AudioRecord.getMinBufferSize(rate, mChannelConfig, AudioFormat.ENCODING_PCM_16BIT);
+//            if (bufferSize > 0) {
+//                return bufferSize;
+//
+//            }
+//        }
+//        return 0;
+//    }
 
-            }
-        }
-        return 0;
-    }
-
-    private void stop() {
-        audioRecord.stop();
-//        audioRecord.release();
-//        session.terminate();
-    }
-
+/*
     private byte[] getLocalIPAddress() {
         byte[] bytes = null;
 
@@ -318,7 +351,7 @@ public class MainActivity extends AppCompatActivity {
 
         return bytes;
     }
-
+*/
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String[] permissions, int[] grantResults) {
@@ -329,7 +362,8 @@ public class MainActivity extends AppCompatActivity {
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // permission was granted, yay! Do the
                     // contacts-related task you need to do.
-                    startAudio();
+                    audioSource.startRecording();
+                    audioCommand.startRecognition();
                 } else {
                     // permission denied, boo! Disable the
                     // functionality that depends on this permission.

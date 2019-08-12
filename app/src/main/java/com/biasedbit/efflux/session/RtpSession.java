@@ -33,9 +33,11 @@ public interface RtpSession extends DataPacketReceiver {
 
     int getPayloadType();
 
-    boolean init(io.reactivex.Observable<byte[]> datasource) throws  Exception;
+    boolean init();
 
-//    void terminate();
+    boolean sendData(byte[] data, long timestamp);
+
+    void terminate(Throwable throwable);
 
 //
 //    boolean sendControlPacket(ControlPacket packet);

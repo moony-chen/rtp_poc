@@ -24,6 +24,7 @@
         android:layout_marginTop="20dp"
         android:ems="10"
         android:hint="IP Address"
+        android:text="10.0.2.3"
         android:inputType="phone" />
 
     <EditText
@@ -33,6 +34,7 @@
         android:layout_marginTop="20dp"
         android:ems="10"
         android:hint="Port"
+        android:text="62771"
         android:inputType="number" >
 
         <requestFocus />
@@ -67,5 +69,11 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Talking? " />
+
+    <TextView
+        android:id="@+id/awakeView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Awake? " />
 
 </LinearLayout>

@@ -46,6 +46,4 @@ public class DataPacketDecoder extends MessageToMessageDecoder<ByteBuf> {
         }
     }
 
-
-
 }

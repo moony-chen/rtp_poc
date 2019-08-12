@@ -34,13 +34,18 @@ import java.util.Observable;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.socket.oio.OioDatagramChannel;
+import io.netty.handler.codec.DatagramPacketDecoder;
+import io.netty.handler.codec.DatagramPacketEncoder;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timeout;
 
@@ -78,6 +83,9 @@ public class SingleParticipantSession extends AbstractRtpSession {
 
     private final AtomicBoolean receivedPackets;
 
+    private Channel channel;
+    private EventLoopGroup group = new NioEventLoopGroup();
+
     // constructors ---------------------------------------------------------------------------------------------------
 
     public SingleParticipantSession(String id, int payloadType, RtpParticipant localParticipant,
@@ -100,15 +108,13 @@ public class SingleParticipantSession extends AbstractRtpSession {
     }
 
     @Override
-    public boolean init(io.reactivex.Observable<byte[]> datasource) throws Exception{
+    public boolean init(){
         if (this.running.get()) {
             return true;
         }
 
 //        SocketAddress remote = new InetSocketAddress("192.168.1.108", 53063);
 
-        final RtpDatasourceHander datasourceHander = new RtpDatasourceHander(datasource);
-        EventLoopGroup group = new NioEventLoopGroup();
         this.dataBootstrap = new Bootstrap();
         this.dataBootstrap.group(group)
                 .channel(NioDatagramChannel.class)
@@ -117,24 +123,21 @@ public class SingleParticipantSession extends AbstractRtpSession {
 
                     @Override
                     protected void initChannel(DatagramChannel ch) throws Exception {
-                        ch.pipeline().addLast("decoder", new DataPacketDecoder());
-                        ch.pipeline().addLast("encoder", DataPacketEncoder.getInstance());
+                        ch.pipeline().addLast("decoder", new DatagramPacketDecoder(new DataPacketDecoder()));
                         ch.pipeline().addLast("handler", new DataHandler(SingleParticipantSession.this));
-                        ch.pipeline().addLast("datasource", datasourceHander);
+                        ch.pipeline().addLast("encoder", DataPacketEncoder.getInstance());
                     }
                 })
                 .option(ChannelOption.SO_RCVBUF, this.receiveBufferSize)
                 .option(ChannelOption.SO_SNDBUF, this.sendBufferSize);
 
         try {
-
-
             ChannelFuture f = this.dataBootstrap.connect().sync();
-            f.channel().closeFuture().sync();
+            channel = f.channel();
+            this.running.set(true);
 
             return true;
-        } finally {
-            group.shutdownGracefully().sync();
+        } catch (Exception e){
             return false;
         }
 
@@ -142,6 +145,57 @@ public class SingleParticipantSession extends AbstractRtpSession {
     }
 
 
+    public boolean sendData(byte[] data, long timestamp) {
+        if (!this.running.get()) {
+            return false;
+        }
+
+        DataPacket packet = new DataPacket();
+        // Other fields will be set by sendDataPacket()
+        packet.setTimestamp(timestamp);
+        packet.setData(data);
+        packet.setMarker(false);
+
+        return this.sendDataPacket(packet);
+    }
+
+    public boolean sendDataPacket(DataPacket packet) {
+        if (!this.running.get()) {
+            return false;
+        }
+
+        packet.setPayloadType(this.payloadType);
+        packet.setSsrc(this.localParticipant.getSsrc());
+        packet.setSequenceNumber(this.sequence.incrementAndGet());
+        this.internalSendData(packet);
+        return true;
+    }
+
+    protected void internalSendData(DataPacket packet) {
+        try {
+            // This assumes that the sender is sending is sending from the same ports where its expecting to receive.
+            // Can be dangerous if the other end fully respects the RFC and supports ICE, but this is nearly the only
+            // workaround that will work if the other end doesn't support ICE and is behind a NAT.
+
+            this.channel.writeAndFlush(packet).sync();
+            this.sentOrReceivedPackets.set(true);
+        } catch (Exception e) {
+            e.printStackTrace();
+            LOG.error("Failed to send {} to {} in session with id {}.", this.id, this.receiver.getInfo());
+        }
+    }
+
+    @Override
+    public void terminate(Throwable throwable) {
+        try {
+            this.running.set(false);
+            channel.closeFuture().sync();
+            group.shutdownGracefully().sync();
+
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
 
     // RtpSession -----------------------------------------------------------------------------------------------------
 
@@ -191,15 +245,15 @@ public class SingleParticipantSession extends AbstractRtpSession {
 
     @Override
     public void dataPacketReceived(SocketAddress origin, DataPacket packet) {
-        if (!this.receivedPackets.getAndSet(true)) {
-            // If this is the first packet then setup the SSRC for this participant (we didn't know it yet).
-            this.receiver.getInfo().setSsrc(packet.getSsrc());
-            LOG.trace("First packet received from remote source, updated SSRC to {}.", packet.getSsrc());
-        } else if (this.ignoreFromUnknownSsrc && (packet.getSsrc() != this.receiver.getInfo().getSsrc())) {
-            LOG.trace("Discarded packet from unexpected SSRC: {} (expected was {}).",
-                      packet.getSsrc(), this.receiver.getInfo().getSsrc());
-            return;
-        }
+//        if (!this.receivedPackets.getAndSet(true)) {
+//            // If this is the first packet then setup the SSRC for this participant (we didn't know it yet).
+//            this.receiver.getInfo().setSsrc(packet.getSsrc());
+//            LOG.trace("First packet received from remote source, updated SSRC to {}.", packet.getSsrc());
+//        } else if (this.ignoreFromUnknownSsrc && (packet.getSsrc() != this.receiver.getInfo().getSsrc())) {
+//            LOG.trace("Discarded packet from unexpected SSRC: {} (expected was {}).",
+//                      packet.getSsrc(), this.receiver.getInfo().getSsrc());
+//            return;
+//        }
 
         super.dataPacketReceived(origin, packet);
     }

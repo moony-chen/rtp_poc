@@ -188,83 +188,6 @@ public abstract class AbstractRtpSession implements RtpSession {
     }
 
 
-
-    public class RtpDatasourceHander extends SimpleChannelInboundHandler {
-
-        private io.reactivex.Observable<byte[]> datasource;
-        private Disposable disposable;
-
-
-        public RtpDatasourceHander(io.reactivex.Observable<byte[]> datasource) {
-            super(true);
-            this.datasource = datasource;
-        }
-
-        @Override
-        public void channelActive(final ChannelHandlerContext ctx) throws Exception {
-            running.set(true);
-//            ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
-            datasource
-//                    .subscribeOn(Schedulers.io())
-                    .subscribe(new Observer<byte[]>() {
-                @Override
-                public void onSubscribe(Disposable d) {
-                    disposable = d;
-                }
-
-                @Override
-                public void onNext(byte[] o) {
-                    ctx.writeAndFlush(wrapData(o, new Date().getTime()));
-//                    ctx.writeAndFlush(Unpooled.copiedBuffer("test", CharsetUtil.UTF_8));
-                }
-
-                @Override
-                public void onError(Throwable e) {
-
-                }
-
-                @Override
-                public void onComplete() {
-//                ctx.channel().closeFuture().sync();
-                }
-            });
-
-        }
-
-        @Override
-        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            running.set(false);
-            if(disposable!=null && !disposable.isDisposed()) disposable.dispose();
-        }
-
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
-
-        }
-    }
-
-//    @Override
-//    public void terminate() {
-//        this.terminate(RtpSessionEventListener.TERMINATE_CALLED);
-//    }
-
-    DataPacket wrapData(byte[] data, long timestamp) {
-        if (!this.running.get()) {
-            return null;
-        }
-
-        DataPacket packet = new DataPacket();
-        // Other fields will be set by sendDataPacket()
-        packet.setTimestamp(timestamp);
-        packet.setData(data);
-        packet.setPayloadType(this.payloadType);
-        packet.setSsrc(this.localParticipant.getSsrc());
-        packet.setSequenceNumber(this.sequence.incrementAndGet());
-        return packet;
-
-    }
-
-
     @Override
     public RtpParticipant getLocalParticipant() {
         return this.localParticipant;
@@ -334,8 +257,8 @@ public abstract class AbstractRtpSession implements RtpSession {
             return;
         }
 
-        if (packet.getSsrc() == this.localParticipant.getSsrc()) {
-            // Sending data to ourselves? Consider this a loop and bail out!
+//        if (packet.getSsrc() == this.localParticipant.getSsrc()) {
+//            // Sending data to ourselves? Consider this a loop and bail out!
 //            if (origin.equals(this.localParticipant.getDataDestination())) {
 //                this.terminate(new Throwable("Loop detected: session is directly receiving its own packets"));
 //                return;
@@ -343,51 +266,51 @@ public abstract class AbstractRtpSession implements RtpSession {
 //                this.terminate(new Throwable("Loop detected after " + this.collisions.get() + " SSRC collisions"));
 //                return;
 //            }
-
-            long oldSsrc = this.localParticipant.getSsrc();
-            long newSsrc = this.localParticipant.resolveSsrcConflict(packet.getSsrc());
-
-            // A collision has been detected after packets were sent, resolve by updating the local SSRC and sending
-            // a BYE RTCP packet for the old SSRC.
-            // http://tools.ietf.org/html/rfc3550#section-8.2
-            // If no packet was sent and this is the first being received then we can avoid collisions by switching
-            // our own SSRC to something else (nothing else is required because the collision was prematurely detected
-            // and avoided).
-            // http://tools.ietf.org/html/rfc3550#section-8.1, last paragraph
-//            if (this.sentOrReceivedPackets.getAndSet(true)) {
-//                this.leaveSession(oldSsrc, "SSRC collision detected; rejoining with new SSRC.");
-//                this.joinSession(newSsrc);
+//
+//            long oldSsrc = this.localParticipant.getSsrc();
+//            long newSsrc = this.localParticipant.resolveSsrcConflict(packet.getSsrc());
+//
+//            // A collision has been detected after packets were sent, resolve by updating the local SSRC and sending
+//            // a BYE RTCP packet for the old SSRC.
+//            // http://tools.ietf.org/html/rfc3550#section-8.2
+//            // If no packet was sent and this is the first being received then we can avoid collisions by switching
+//            // our own SSRC to something else (nothing else is required because the collision was prematurely detected
+//            // and avoided).
+//            // http://tools.ietf.org/html/rfc3550#section-8.1, last paragraph
+////            if (this.sentOrReceivedPackets.getAndSet(true)) {
+////                this.leaveSession(oldSsrc, "SSRC collision detected; rejoining with new SSRC.");
+////                this.joinSession(newSsrc);
+////            }
+//
+//            LOG.warn("SSRC collision with remote end detected on session with id {}; updating SSRC from {} to {}.",
+//                     this.id, oldSsrc, newSsrc);
+//            for (RtpSessionEventListener listener : this.eventListeners) {
+//                listener.resolvedSsrcConflict(this, oldSsrc, newSsrc);
 //            }
+//        }
 
-            LOG.warn("SSRC collision with remote end detected on session with id {}; updating SSRC from {} to {}.",
-                     this.id, oldSsrc, newSsrc);
-            for (RtpSessionEventListener listener : this.eventListeners) {
-                listener.resolvedSsrcConflict(this, oldSsrc, newSsrc);
-            }
-        }
-
-        // Associate the packet with a participant or create one.
-        RtpParticipant participant = this.participantDatabase.getOrCreateParticipantFromDataPacket(origin, packet);
-        if (participant == null) {
-            // Depending on database implementation, it may chose not to create anything, in which case this packet
-            // must be discarded.
-            return;
-        }
-
-        // Should the packet be discarded due to out of order SN?
-        if ((participant.getLastSequenceNumber() >= packet.getSequenceNumber()) && this.discardOutOfOrder) {
-            LOG.trace("Discarded out of order packet from {} in session with id {} (last SN was {}, packet SN was {}).",
-                      participant, this.id, participant.getLastSequenceNumber(), packet.getSequenceNumber());
-            return;
-        }
-
-        // Update last SN for participant.
-        participant.setLastSequenceNumber(packet.getSequenceNumber());
-        participant.setLastDataOrigin(origin);
+//        // Associate the packet with a participant or create one.
+//        RtpParticipant participant = this.participantDatabase.getOrCreateParticipantFromDataPacket(origin, packet);
+//        if (participant == null) {
+//            // Depending on database implementation, it may chose not to create anything, in which case this packet
+//            // must be discarded.
+//            return;
+//        }
+//
+//        // Should the packet be discarded due to out of order SN?
+//        if ((participant.getLastSequenceNumber() >= packet.getSequenceNumber()) && this.discardOutOfOrder) {
+//            LOG.trace("Discarded out of order packet from {} in session with id {} (last SN was {}, packet SN was {}).",
+//                      participant, this.id, participant.getLastSequenceNumber(), packet.getSequenceNumber());
+//            return;
+//        }
+//
+//        // Update last SN for participant.
+//        participant.setLastSequenceNumber(packet.getSequenceNumber());
+//        participant.setLastDataOrigin(origin);
 
         // Finally, dispatch the event to the data listeners.
         for (RtpSessionDataListener listener : this.dataListeners) {
-            listener.dataPacketReceived(this, participant.getInfo(), packet);
+            listener.dataPacketReceived(this, null, packet);
         }
     }
 //
