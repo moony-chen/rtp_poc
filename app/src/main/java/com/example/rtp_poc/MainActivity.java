@@ -258,7 +258,7 @@ public class MainActivity extends AppCompatActivity {
                 String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
                 String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
 
-                RtpParticipant localP = RtpParticipant.createReceiver("10.0.2.9", 12345, 11113);
+                RtpParticipant localP = RtpParticipant.createReceiver("0.0.0.0", 12345, 11113);
                 RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
                 RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
