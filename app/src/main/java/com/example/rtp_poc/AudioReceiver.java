@@ -3,10 +3,11 @@ package com.example.rtp_poc;
 import android.content.Context;
 import android.util.Log;
 
-import com.biasedbit.efflux.packet.DataPacket;
-import com.biasedbit.efflux.participant.RtpParticipantInfo;
-import com.biasedbit.efflux.session.RtpSession;
-import com.biasedbit.efflux.session.RtpSessionDataListener;
+
+import com.bluejay.rtp.DataPacket;
+import com.bluejay.rtp.RtpParticipant;
+import com.bluejay.rtp.RtpSession;
+import com.bluejay.rtp.RtpSessionDataListener;
 
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -31,9 +32,10 @@ public class AudioReceiver implements RtpSessionDataListener {
     }
 
     @Override
-    public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-        Log.d("AudioReceiver", Arrays.toString(packet.getDataAsArray()));
-        stream.offer(packet.getDataAsArray());
+    public void dataPacketReceived(RtpSession session, RtpParticipant participant, DataPacket packet) {
+        byte[] data = packet.getDataAsArray();
+        Log.d("AudioReceiver", Arrays.toString(data));
+        stream.offer(data);
     }
 
     public void setContext(Context context) {

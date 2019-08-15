@@ -16,7 +16,6 @@
 
 package com.bluejay.rtp;
 
-import com.biasedbit.efflux.packet.DataPacket;
 
 import java.net.SocketAddress;
 

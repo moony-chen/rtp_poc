@@ -5,7 +5,8 @@ package com.example.rtp_poc;
 
 import android.util.Log;
 
-import com.biasedbit.efflux.session.RtpSession;
+
+import com.bluejay.rtp.RtpSession;
 
 import java.util.Arrays;
 import java.util.Date;

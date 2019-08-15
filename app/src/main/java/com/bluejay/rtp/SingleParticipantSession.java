@@ -1,56 +1,25 @@
-/*
- * Copyright 2010 Bruno de Carvalho
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.bluejay.rtp;
 
 import android.util.Log;
 
-import com.biasedbit.efflux.network.DataHandler;
-import com.biasedbit.efflux.network.DataPacketDecoder;
-import com.biasedbit.efflux.network.DataPacketEncoder;
-import com.biasedbit.efflux.packet.DataPacket;
-import com.biasedbit.efflux.participant.ParticipantDatabase;
-import com.biasedbit.efflux.participant.RtpParticipant;
-import com.biasedbit.efflux.participant.SingleParticipantDatabase;
-import com.biasedbit.efflux.session.AbstractRtpSession;
-
+import java.io.IOException;
+import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.SocketAddress;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.DatagramChannel;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.handler.codec.DatagramPacketDecoder;
-import io.netty.handler.codec.DatagramPacketEncoder;
-import io.netty.util.HashedWheelTimer;
 
 
 public class SingleParticipantSession implements RtpSession {
 
-    protected static final int BANDWIDTH_LIMIT = 256;
+    private static final String TAG = "RtpSession";
+
     protected static final int SEND_BUFFER_SIZE = 1024;
     protected static final int RECEIVE_BUFFER_SIZE = 1024;
 
@@ -67,11 +36,15 @@ public class SingleParticipantSession implements RtpSession {
     private final AtomicBoolean running;
     protected final AtomicInteger sequence;
 
-    private boolean sendToLastOrigin;
-    private boolean ignoreFromUnknownSsrc;
+    protected final List<RtpSessionDataListener> dataListeners;
 
     // internal vars --------------------------------------------------------------------------------------------------
     private DatagramSocket clientSocket;
+
+    private Thread sendThread;
+    private RtpSender rtpSender;
+    private Thread receiveThread;
+    private RtpReceiver rtpReceiver;
 
 
 
@@ -90,6 +63,7 @@ public class SingleParticipantSession implements RtpSession {
 
         this.running = new AtomicBoolean(false);
         this.sequence = new AtomicInteger(0);
+        this.dataListeners = new CopyOnWriteArrayList<>();
     }
 
     @Override
@@ -117,6 +91,18 @@ public class SingleParticipantSession implements RtpSession {
 
         try {
             clientSocket = new DatagramSocket();
+            clientSocket.setReceiveBufferSize(this.receiveBufferSize);
+            clientSocket.setSendBufferSize(this.sendBufferSize);
+
+            rtpSender = new RtpSender(clientSocket, new ToDatagram(this.receiver));
+            sendThread = new Thread(rtpSender);
+            sendThread.start();
+
+            rtpReceiver = new RtpReceiver(dataListeners, clientSocket, this);
+            receiveThread = new Thread(rtpReceiver);
+            receiveThread.start();
+
+
             this.running.set(true);
 
             return true;
@@ -139,14 +125,6 @@ public class SingleParticipantSession implements RtpSession {
         packet.setData(data);
         packet.setMarker(false);
 
-        return this.sendDataPacket(packet);
-    }
-
-    public boolean sendDataPacket(DataPacket packet) {
-        if (!this.running.get()) {
-            return false;
-        }
-
         packet.setPayloadType(this.payloadType);
         packet.setSsrc(this.localParticipant.getSsrc());
         packet.setSequenceNumber(this.sequence.incrementAndGet());
@@ -154,13 +132,15 @@ public class SingleParticipantSession implements RtpSession {
         return true;
     }
 
+
     protected void internalSendData(DataPacket packet) {
         try {
 
+            rtpSender.send(packet);
 
         } catch (Exception e) {
             e.printStackTrace();
-            Log.e("Tag", "Failed to send {} to {} in session with id {}.", this.id, this.receiver.getInfo());
+            Log.e(TAG, "Failed to send" );
         }
     }
 
@@ -168,33 +148,14 @@ public class SingleParticipantSession implements RtpSession {
     public void terminate() {
         try {
             this.running.set(false);
-            channel.closeFuture().sync();
-            group.shutdownGracefully().sync();
+            clientSocket.close();
 
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
 
-
-
-    // DataPacketReceiver ---------------------------------------------------------------------------------------------
-
-    @Override
-    public void dataPacketReceived(SocketAddress origin, DataPacket packet) {
-        if (!this.receivedPackets.getAndSet(true)) {
-            // If this is the first packet then setup the SSRC for this participant (we didn't know it yet).
-            this.receiver.getInfo().setSsrc(packet.getSsrc());
-            LOG.trace("First packet received from remote source, updated SSRC to {}.", packet.getSsrc());
-        } else if (this.ignoreFromUnknownSsrc && (packet.getSsrc() != this.receiver.getInfo().getSsrc())) {
-            LOG.trace("Discarded packet from unexpected SSRC: {} (expected was {}).",
-                      packet.getSsrc(), this.receiver.getInfo().getSsrc());
-            return;
-        }
-
-        super.dataPacketReceived(origin, packet);
-    }
 
     // getters & setters ----------------------------------------------------------------------------------------------
 
@@ -202,27 +163,91 @@ public class SingleParticipantSession implements RtpSession {
         return this.receiver;
     }
 
-    public boolean isSendToLastOrigin() {
-        return sendToLastOrigin;
+
+    @Override
+    public void addDataListener(RtpSessionDataListener listener) {
+        this.dataListeners.add(listener);
     }
 
-    public void setSendToLastOrigin(boolean sendToLastOrigin) {
-        if (this.running.get()) {
-            throw new IllegalArgumentException("Cannot modify property after initialisation");
+    @Override
+    public void removeDataListener(RtpSessionDataListener listener) {
+        this.dataListeners.remove(listener);
+    }
+
+    private class RtpSender implements Runnable {
+        private Queue<DataPacket> queue = new ConcurrentLinkedQueue<>();
+        private boolean stopped = false;
+
+        private DatagramSocket clientSocket;
+        private DataConverter<DataPacket, DatagramPacket> converter;
+
+        public RtpSender(DatagramSocket clientSocket, DataConverter<DataPacket, DatagramPacket> converter) {
+            this.clientSocket = clientSocket;
+            this.converter = converter;
         }
-        this.sendToLastOrigin = sendToLastOrigin;
-    }
 
-    public boolean isIgnoreFromUnknownSsrc() {
-        return ignoreFromUnknownSsrc;
-    }
-
-    public void setIgnoreFromUnknownSsrc(boolean ignoreFromUnknownSsrc) {
-        if (this.running.get()) {
-            throw new IllegalArgumentException("Cannot modify property after initialisation");
+        public void send(DataPacket dataPacket) {
+            this.queue.offer(dataPacket);
         }
-        this.ignoreFromUnknownSsrc = ignoreFromUnknownSsrc;
+
+        public boolean isStopped() {
+            return stopped;
+        }
+
+        public void setStopped(boolean stopped) {
+            this.stopped = stopped;
+        }
+
+        @Override
+        public void run() {
+            while (!stopped) {
+                try {
+                    if (!queue.isEmpty()) {
+                        DataPacket packet = queue.poll();
+                        clientSocket.send(converter.convert(packet));
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Log.e(TAG, "Failed to send" );
+                }
+            }
+        }
     }
 
 
+    private class RtpReceiver implements Runnable {
+        private List<RtpSessionDataListener> listeners;
+        private boolean stopped = false;
+        private DatagramSocket clientSocket;
+        private RtpSession session;
+        private DataConverter<DatagramPacket, DataPacket> converter = new FromDatagram();
+
+        public RtpReceiver(List<RtpSessionDataListener> listeners, DatagramSocket clientSocket, RtpSession session) {
+            this.listeners = listeners;
+            this.clientSocket = clientSocket;
+            this.session = session;
+        }
+
+        @Override
+        public void run() {
+            while(!stopped) {
+                try {
+                    DatagramPacket packet = new DatagramPacket(new byte[1024], 1024);
+                    clientSocket.receive(packet);
+                    RtpParticipant remoteParticipant = session.getRemoteParticipant();
+
+
+                    if (!packet.getSocketAddress().equals(remoteParticipant.getDataDestination())) continue;
+
+                    for (RtpSessionDataListener listener: listeners) {
+                        listener.dataPacketReceived(session, remoteParticipant, converter.convert(packet));
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.e(TAG, "Failed to receive" );
+                }
+            }
+        }
+    }
 }

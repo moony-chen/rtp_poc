@@ -64,14 +64,15 @@ public class DataPacket {
 
         ByteBuffer buffer = ByteBuffer.wrap(data);
 
-        byte b = buffer.get();
+        if (buffer.remaining() < 12) {
 
-        if (b < 12) {
             throw new IllegalArgumentException("A RTP packet must be at least 12 octets long");
         }
 
         // Version, Padding, eXtension, CSRC Count
         DataPacket packet = new DataPacket();
+        byte b = buffer.get();
+
 
         packet.version = RtpVersion.fromByte(b);
         boolean padding = (b & 0x20) > 0; // mask 0010 0000
@@ -202,10 +203,7 @@ public class DataPacket {
             buffer.put((byte)padding);
         }
 
-        byte[] dst = new byte[size];
-        buffer.get(dst);
-
-        return dst;
+        return buffer.array();
     }
 
     // public methods -------------------------------------------------------------------------------------------------

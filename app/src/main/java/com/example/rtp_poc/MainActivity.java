@@ -1,54 +1,35 @@
 package com.example.rtp_poc;
 
 import android.Manifest;
-import android.content.Context;
 import android.content.pm.PackageManager;
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioRecord;
-import android.media.MediaRecorder;
-import android.net.wifi.WifiManager;
 import android.os.Bundle;
-import android.os.StrictMode;
-import android.text.format.Formatter;
-import android.util.Log;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.biasedbit.efflux.logging.Logger;
-import com.biasedbit.efflux.packet.DataPacket;
-import com.biasedbit.efflux.participant.RtpParticipant;
-import com.biasedbit.efflux.participant.RtpParticipantInfo;
-import com.biasedbit.efflux.session.RtpSession;
-import com.biasedbit.efflux.session.RtpSessionDataListener;
-import com.biasedbit.efflux.session.SingleParticipantSession;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import com.bluejay.rtp.DataPacket;
+import com.bluejay.rtp.RtpParticipant;
+import com.bluejay.rtp.RtpSession;
+import com.bluejay.rtp.RtpSessionDataListener;
+import com.bluejay.rtp.SingleParticipantSession;
+
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import io.reactivex.Observable;
-import io.reactivex.Scheduler;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.BiFunction;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.functions.Function3;
-import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
-import io.reactivex.subjects.PublishSubject;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -258,12 +239,13 @@ public class MainActivity extends AppCompatActivity {
                 String remoteAddress = ((EditText)findViewById(R.id.editText2)).getText().toString();
                 String remotePort = ((EditText)findViewById(R.id.editText1)).getText().toString();
 
-                RtpParticipant localP = RtpParticipant.createReceiver("10.0.2.9", 12345, 11113);
+                RtpParticipant localP = RtpParticipant.createReceiver("0.0.0.0", 12345, 11113);
                 RtpParticipant remoteP = RtpParticipant.createReceiver(remoteAddress, Integer.parseInt(remotePort) , 21112);
 
                 RtpSession session = new SingleParticipantSession("id", 1, localP, remoteP);
-                session.addReceiver(remoteP);
+
                 session.addDataListener(receiver);
+
                 try {
                     session.init();
                 } catch (Exception e) {

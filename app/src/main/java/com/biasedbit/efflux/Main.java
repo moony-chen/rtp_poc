@@ -8,28 +8,42 @@ import com.biasedbit.efflux.session.RtpSession;
 import com.biasedbit.efflux.session.RtpSessionDataListener;
 import com.biasedbit.efflux.session.SingleParticipantSession;
 
+import java.util.Arrays;
+import java.util.Date;
+
+import io.netty.buffer.ByteBuf;
+
 /**
  * Created by fangchen on 7/28/19.
  */
 public class Main {
 
     public static void main(String[] args) throws  Exception {
-        RtpParticipant localP = RtpParticipant.createReceiver("locahost", 11111, 11112);
-        RtpParticipant remoteP = RtpParticipant.createReceiver("localhost", 56354, 21112);
 
-        SingleParticipantSession session = new SingleParticipantSession("id", 1, localP, remoteP);
-        session.addDataListener(new RtpSessionDataListener() {
-            @Override
-            public void dataPacketReceived(RtpSession session, RtpParticipantInfo participant, DataPacket packet) {
-                Logger.getLogger(Main.class).debug(packet.getDataAsArray().toString());
-            }
-        });
+        long time = new Date().getTime();
 
         DataPacket dp = new DataPacket();
-        dp.setPayloadType(1);
-        dp.setSequenceNumber(1);
+        dp.setPayloadType(111);
+        dp.setSequenceNumber(256);
+        dp.setSsrc(2838938934L);
+        dp.setTimestamp(time);
         dp.setData(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
-        session.sendDataPacket(dp);
-        Thread.sleep(2000);
+
+        byte[] bufferO = dp.encode().array();
+
+        com.bluejay.rtp.DataPacket dpN = new com.bluejay.rtp.DataPacket();
+        dpN.setPayloadType(111);
+        dpN.setSequenceNumber(256);
+        dpN.setSsrc(2838938934L);
+        dpN.setTimestamp(time);
+        dpN.setData(new byte[]{(byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5, (byte) 0xd5});
+
+
+
+        System.out.println(Arrays.toString(bufferO));
+
+        byte[] bufferN = dpN.encode();
+        System.out.println(Arrays.toString(bufferN));
+
     }
 }
