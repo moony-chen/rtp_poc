@@ -136,6 +136,7 @@ public class SingleParticipantSession implements RtpSession {
     protected void internalSendData(DataPacket packet) {
         try {
 
+
             rtpSender.send(packet);
 
         } catch (Exception e) {

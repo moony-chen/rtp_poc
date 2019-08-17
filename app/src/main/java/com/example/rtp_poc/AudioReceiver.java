@@ -34,7 +34,7 @@ public class AudioReceiver implements RtpSessionDataListener {
     @Override
     public void dataPacketReceived(RtpSession session, RtpParticipant participant, DataPacket packet) {
         byte[] data = packet.getDataAsArray();
-        Log.d("AudioReceiver", Arrays.toString(data));
+//        Log.d("AudioReceiver", Arrays.toString(data));
         stream.offer(data);
     }
 
