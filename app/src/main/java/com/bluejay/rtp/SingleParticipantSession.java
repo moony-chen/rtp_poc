@@ -20,8 +20,8 @@ public class SingleParticipantSession implements RtpSession {
 
     private static final String TAG = "RtpSession";
 
-    protected static final int SEND_BUFFER_SIZE = 1024;
-    protected static final int RECEIVE_BUFFER_SIZE = 1024;
+    protected static final int SEND_BUFFER_SIZE = 1500;
+    protected static final int RECEIVE_BUFFER_SIZE = 1500;
 
 
     private final String id;
@@ -91,8 +91,8 @@ public class SingleParticipantSession implements RtpSession {
 
         try {
             clientSocket = new DatagramSocket();
-            clientSocket.setReceiveBufferSize(this.receiveBufferSize);
-            clientSocket.setSendBufferSize(this.sendBufferSize);
+//            clientSocket.setReceiveBufferSize(this.receiveBufferSize);
+//            clientSocket.setSendBufferSize(this.sendBufferSize);
 
             rtpSender = new RtpSender(clientSocket, new ToDatagram(this.receiver));
             sendThread = new Thread(rtpSender);
@@ -118,6 +118,7 @@ public class SingleParticipantSession implements RtpSession {
         if (!this.running.get()) {
             return false;
         }
+        if (data == null || data.length == 0) return true;
 
         DataPacket packet = new DataPacket();
         // Other fields will be set by sendDataPacket()
@@ -234,7 +235,7 @@ public class SingleParticipantSession implements RtpSession {
         public void run() {
             while(!stopped) {
                 try {
-                    DatagramPacket packet = new DatagramPacket(new byte[1024], 1024);
+                    DatagramPacket packet = new DatagramPacket(new byte[RECEIVE_BUFFER_SIZE], RECEIVE_BUFFER_SIZE);
                     clientSocket.receive(packet);
                     RtpParticipant remoteParticipant = session.getRemoteParticipant();
 
