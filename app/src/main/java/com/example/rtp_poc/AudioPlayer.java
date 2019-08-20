@@ -11,6 +11,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class AudioPlayer {
     private static final String TAG = "AudioPlayer";
@@ -33,7 +34,7 @@ public class AudioPlayer {
     }
     public void init(){
         bufferSize = AudioTrack.getMinBufferSize(mSampleRate, mChannelConfig, mAudioFormat);
-        audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, mSampleRate, mChannelConfig,mAudioFormat, bufferSize, AudioTrack.MODE_STREAM);
+        audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, mSampleRate, mChannelConfig,mAudioFormat, 32000, AudioTrack.MODE_STREAM);
     }
     public void play(InputStream stream){
         try {
@@ -72,28 +73,40 @@ public class AudioPlayer {
             play(stream);
         }
     }
-    public void play(LinkedList<byte[]> audio_q){
+    public void play(ConcurrentLinkedQueue<byte[]> audio_q){
         try {
             Log.v(TAG, "start play");
             audioTrack.play();
             isStop = false;
-            byte[] buffer = new byte[bufferSize];
-            int len = 0;
-            while (!isStop) {
-                try {
-                    if(audio_q!=null && audio_q.size()>0) {
-                        buffer = audio_q.poll();
-                        if(buffer !=null && buffer.length>0) {
-                            len = buffer.length;
-                            Log.d(TAG, "play audio: len " + len);
-                            audioTrack.write(buffer, 0, len);
+
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    byte[] buffer = new byte[bufferSize];
+                    int len = 0;
+                    while (!isStop) {
+                        try {
+                            if(audio_q!=null && audio_q.size()>0) {
+//                        synchronized (audio_q) {
+                                buffer = audio_q.poll();
+//                        }
+                                if(buffer !=null && buffer.length>0) {
+                                    len = buffer.length;
+                                    Log.d(TAG, "play audio: len " + len);
+                                    audioTrack.write(buffer, 0, len);
+                                    int sleep =  len / 32;
+//                            Thread.sleep(sleep);
+                                }
+                            }
+                        }
+                        catch (Exception e){
+                            Log.e(TAG, "play audio: e : " + e);
                         }
                     }
                 }
-                catch (Exception e){
-                    Log.e(TAG, "play audio: e : " + e);
-                }
-            }
+            }).start();
+
+
         } catch (Exception e) {
             Log.e(TAG, "play audio: e : " + e);
         }

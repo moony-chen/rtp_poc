@@ -91,7 +91,7 @@ public class SingleParticipantSession implements RtpSession {
 
         try {
             clientSocket = new DatagramSocket();
-//            clientSocket.setReceiveBufferSize(this.receiveBufferSize);
+            clientSocket.setReceiveBufferSize(5120);
 //            clientSocket.setSendBufferSize(this.sendBufferSize);
 
             rtpSender = new RtpSender(clientSocket, new ToDatagram(this.receiver));
