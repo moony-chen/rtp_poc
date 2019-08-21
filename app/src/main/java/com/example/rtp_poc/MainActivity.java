@@ -114,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
             LinkedList<byte[]> queue = new LinkedList<>();
 
             byte[] fileData = new byte[1024];
-            InputStream mp3file = getAssets().open("20170525093951.mp3");
+            InputStream mp3file = getAssets().open("KazeNoTorimichi.mp3");
 //            mp3file.
             DataInputStream dis = new DataInputStream(mp3file);
             int sizeRead = dis.read(fileData);

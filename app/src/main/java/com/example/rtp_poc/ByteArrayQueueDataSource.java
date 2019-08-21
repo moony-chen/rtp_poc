@@ -77,7 +77,7 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
             }
         }
 
-        if (data.peek() == null) {
+        if (data.peek() == null && cache.length == 0) {
             return C.RESULT_END_OF_INPUT;
         }
 
