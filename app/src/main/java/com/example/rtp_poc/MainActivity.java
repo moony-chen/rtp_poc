@@ -3,6 +3,7 @@ package com.example.rtp_poc;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.EditText;
@@ -18,10 +19,24 @@ import com.bluejay.rtp.RtpParticipant;
 import com.bluejay.rtp.RtpSession;
 import com.bluejay.rtp.RtpSessionDataListener;
 import com.bluejay.rtp.SingleParticipantSession;
+import com.google.android.exoplayer2.DefaultRenderersFactory;
+import com.google.android.exoplayer2.ExoPlayer;
+import com.google.android.exoplayer2.ExoPlayerFactory;
+import com.google.android.exoplayer2.RenderersFactory;
+import com.google.android.exoplayer2.source.ExtractorMediaSource;
+import com.google.android.exoplayer2.source.MediaSource;
+import com.google.android.exoplayer2.source.ProgressiveMediaSource;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
+import com.google.android.exoplayer2.upstream.AssetDataSource;
+import com.google.android.exoplayer2.upstream.ByteArrayDataSource;
+import com.google.android.exoplayer2.upstream.DataSource;
+import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
+import com.google.android.exoplayer2.util.Util;
 
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Arrays;
@@ -99,6 +114,121 @@ public class MainActivity extends AppCompatActivity {
             LinkedList<byte[]> queue = new LinkedList<>();
 
             byte[] fileData = new byte[1024];
+            InputStream mp3file = getAssets().open("20170525093951.mp3");
+//            mp3file.
+            DataInputStream dis = new DataInputStream(mp3file);
+            int sizeRead = dis.read(fileData);
+            while (sizeRead > 0) {
+
+                queue.offer(Arrays.copyOf(fileData, sizeRead));
+                sizeRead = dis.read(fileData);
+            }
+            dis.close();
+
+//            byte[] fileData1 = new byte[37581];
+//            int pos = 0;
+//            while (true) {
+//                byte[] poll = queue.poll();
+//                if (poll != null) {
+//                    System.arraycopy(poll, 0, fileData1, pos, poll.length);
+//                    pos += poll.length;
+//                } else {
+//                    break;
+//                }
+//            }
+
+
+//            String file1Str = Arrays.toString(fileData1);
+//            System.out.println(file1Str);
+
+            byte[] fileData2 = new byte[37581];
+            InputStream mp3file2 = getAssets().open("20170525093951.mp3");
+//            mp3file.
+            DataInputStream dis2 = new DataInputStream(mp3file2);
+            dis2.readFully(fileData2);
+
+            String file2Str = Arrays.toString(fileData2);
+            System.out.println(file2Str);
+
+
+//            if (file1Str.equals(file2Str)) {
+//                System.out.println("hoooray");
+//            }
+
+
+            DefaultRenderersFactory renderer = new DefaultRenderersFactory(this);
+            renderer.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
+
+            ExoPlayer player = ExoPlayerFactory.newSimpleInstance(this, renderer, new DefaultTrackSelector());
+
+            ByteArrayQueueDataSource byteArrayDataSource = new ByteArrayQueueDataSource(queue);
+//            ByteArrayDataSource byteArrayDataSource = new ByteArrayDataSource(fileData2);
+            DataSource.Factory factory = new DataSource.Factory() {
+                @Override
+                public DataSource createDataSource() {
+                    return byteArrayDataSource;
+                }
+            };
+            MediaSource mediaSource = new ProgressiveMediaSource.Factory(factory)
+                    .createMediaSource(Uri.EMPTY);
+
+            player.prepare(mediaSource);
+            player.setPlayWhenReady(true);
+
+        }
+        catch(Exception e) {
+            e.printStackTrace();
+        }
+
+
+        /*  read fully from mp3 file
+
+        DefaultRenderersFactory renderer = new DefaultRenderersFactory(this);
+        renderer.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
+
+        ExoPlayer player = ExoPlayerFactory.newSimpleInstance(this, renderer, new DefaultTrackSelector());
+
+        AssetDataSource.Factory dataSourceFactory = new AssetDataSource.Factory() {
+            @Override
+            public DataSource createDataSource() {
+                return new AssetDataSource(MainActivity.this);
+            }
+        };
+
+
+        try {
+            byte[] fileData = new byte[4085919];
+            InputStream mp3file = getAssets().open("KazeNoTorimichi.mp3");
+//            mp3file.
+            DataInputStream dis = new DataInputStream(mp3file);
+            dis.readFully(fileData);
+
+            ByteArrayDataSource byteArrayDataSource = new ByteArrayDataSource(fileData);
+            DataSource.Factory factory = new DataSource.Factory() {
+                @Override
+                public DataSource createDataSource() {
+                    return byteArrayDataSource;
+                }
+            };
+            MediaSource mediaSource = new ProgressiveMediaSource.Factory(factory)
+                    .createMediaSource(Uri.EMPTY);
+
+//        MediaSource mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory)
+//                .createMediaSource(Uri.parse("assets:///KazeNoTorimichi.mp3"));
+
+
+            player.prepare(mediaSource);
+            player.setPlayWhenReady(true);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+*/
+
+/*
+        try {
+            LinkedList<byte[]> queue = new LinkedList<>();
+
+            byte[] fileData = new byte[1024];
             InputStream mp3file = getAssets().open("KazeNoTorimichi.mp3");
 //            mp3file.
             DataInputStream dis = new DataInputStream(mp3file);
@@ -132,7 +262,7 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
-
+*/
 
 //
 //        Observable<Integer> volume$ = this.audioStream$.subscribeOn(Schedulers.computation())

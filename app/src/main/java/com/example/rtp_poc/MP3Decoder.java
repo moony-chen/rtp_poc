@@ -1,6 +1,7 @@
 package com.example.rtp_poc;
 
 import android.media.MediaCodec;
+import android.media.MediaFormat;
 
 import java.io.DataInputStream;
 import java.io.File;
@@ -74,7 +75,8 @@ public class MP3Decoder {
     }
 
     public void start() {
-        codec.configure(null, null, null, 0);
+        MediaFormat mp3 = MediaFormat.createAudioFormat("audio/mpeg", 44100, 2);
+        codec.configure(mp3, null, null, 0);
         codec.start();
         running = true;
         codecInput = new Thread(new CodecEnqueue());
