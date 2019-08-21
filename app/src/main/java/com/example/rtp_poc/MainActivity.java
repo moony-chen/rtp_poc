@@ -1,6 +1,7 @@
 package com.example.rtp_poc;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.View;
@@ -18,8 +19,15 @@ import com.bluejay.rtp.RtpSession;
 import com.bluejay.rtp.RtpSessionDataListener;
 import com.bluejay.rtp.SingleParticipantSession;
 
+import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Locale;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -87,6 +95,42 @@ public class MainActivity extends AppCompatActivity {
         }
 
 
+        try {
+            LinkedList<byte[]> queue = new LinkedList<>();
+
+            byte[] fileData = new byte[1024];
+            InputStream mp3file = getAssets().open("KazeNoTorimichi.mp3");
+//            mp3file.
+            DataInputStream dis = new DataInputStream(mp3file);
+            int sizeRead = dis.read(fileData);
+            while (sizeRead > 0) {
+
+                queue.offer(Arrays.copyOf(fileData, sizeRead));
+                sizeRead = dis.read(fileData);
+            }
+            dis.close();
+
+            MP3Decoder decoder = new MP3Decoder(queue);
+            decoder.start();
+            Queue<byte[]> audioOut = decoder.getAudioOut();
+
+            String filename = "KazeNoTorimichi.wav";
+
+
+
+            FileOutputStream outputStream = openFileOutput(filename, Context.MODE_PRIVATE);
+            byte[] poll = audioOut.poll();
+            while (poll != null) {
+
+                outputStream.write(poll);
+                poll = audioOut.poll();
+            }
+
+
+        }
+        catch(Exception e) {
+            e.printStackTrace();
+        }
 
 
 
@@ -346,7 +390,7 @@ public class MainActivity extends AppCompatActivity {
                     // permission was granted, yay! Do the
                     // contacts-related task you need to do.
                     audioSource.startRecording();
-                    audioCommand.startRecognition();
+//                    audioCommand.startRecognition();
                 } else {
                     // permission denied, boo! Disable the
                     // functionality that depends on this permission.
