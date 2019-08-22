@@ -10,6 +10,7 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
     }
     aaptOptions {
         noCompress "tflite"
@@ -40,4 +41,5 @@ dependencies {
     implementation 'org.tensorflow:tensorflow-lite:0.0.0-nightly'
     implementation 'com.google.android.exoplayer:exoplayer-core:2.10.4'
 //    implementation 'org.tensorflow:tensorflow-android:+'
+    implementation 'androidx.multidex:multidex:2.0.1'
 }

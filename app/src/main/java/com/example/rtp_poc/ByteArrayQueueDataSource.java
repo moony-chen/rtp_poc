@@ -109,6 +109,8 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
         uri = null;
     }
 
+    /*
+
     public static void main(String[] args) throws Exception {
 
         byte[] fileData2 = new byte[37581];
@@ -165,4 +167,5 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
             System.out.println("hoooray");
         }
     }
+    */
 }
