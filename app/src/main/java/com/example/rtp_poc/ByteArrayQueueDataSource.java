@@ -60,14 +60,14 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
         int copied = 0;
 
         if (cache.length >= readLength) { // cache is enough for buffer
-            System.out.println("cache is enough for buffer offset:" + offset+ ", readLength:" + readLength);
+//            System.out.println("cache is enough for buffer offset:" + offset+ ", readLength:" + readLength);
             System.arraycopy(cache, 0, buffer, offset, readLength);
             byte[] cacheN = new byte[cache.length - readLength];
             System.arraycopy(cache, readLength, cacheN, 0, cacheN.length);
             cache = cacheN;
             copied = readLength;
         } else {
-            System.out.println("poll for buffer offset:" + offset+ ", readLength:" + readLength);
+//            System.out.println("poll for buffer offset:" + offset+ ", readLength:" + readLength);
             System.arraycopy(cache, 0, buffer, offset, cache.length);
             copied += cache.length;
             cache = new byte[0];
@@ -162,7 +162,7 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
         System.out.println(file3Str);
 
         if (file3Str.equals(file2Str)) {
-                System.out.println("hoooray");
-            }
+            System.out.println("hoooray");
+        }
     }
 }
