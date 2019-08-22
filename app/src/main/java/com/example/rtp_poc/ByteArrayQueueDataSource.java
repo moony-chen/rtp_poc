@@ -9,8 +9,15 @@ import com.google.android.exoplayer2.upstream.BaseDataSource;
 import com.google.android.exoplayer2.upstream.DataSpec;
 import com.google.android.exoplayer2.util.Assertions;
 
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class ByteArrayQueueDataSource extends BaseDataSource {
     private final Queue<byte[]> data;
@@ -19,7 +26,7 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
     private @Nullable
     Uri uri;
     private int readPosition;
-    private int bytesRemaining;
+    private int bytesRemaining = 100;
     private boolean opened;
 
     /**
@@ -53,15 +60,18 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
         int copied = 0;
 
         if (cache.length >= readLength) { // cache is enough for buffer
+            System.out.println("cache is enough for buffer offset:" + offset+ ", readLength:" + readLength);
             System.arraycopy(cache, 0, buffer, offset, readLength);
             byte[] cacheN = new byte[cache.length - readLength];
             System.arraycopy(cache, readLength, cacheN, 0, cacheN.length);
             cache = cacheN;
             copied = readLength;
         } else {
+            System.out.println("poll for buffer offset:" + offset+ ", readLength:" + readLength);
             System.arraycopy(cache, 0, buffer, offset, cache.length);
+            copied += cache.length;
             cache = new byte[0];
-            copied = cache.length;
+
             byte[] peek = data.peek();
             while (peek != null && copied < readLength) {
                 byte[] poll = data.poll();
@@ -77,9 +87,7 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
             }
         }
 
-        if (data.peek() == null && cache.length == 0) {
-            return C.RESULT_END_OF_INPUT;
-        }
+        bytesRemaining = cache.length + (data.peek() != null ? data.peek().length : 0);
 
 
         readPosition += copied;
@@ -99,5 +107,62 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
             transferEnded();
         }
         uri = null;
+    }
+
+    public static void main(String[] args) throws Exception {
+
+        byte[] fileData2 = new byte[37581];
+        File file = new File("/Users/moonychen/Downloads/20170525093951.mp3");
+
+        InputStream mp3file2 = new FileInputStream(file);
+//            mp3file.
+        DataInputStream dis2 = new DataInputStream(mp3file2);
+        dis2.readFully(fileData2);
+
+        String file2Str = Arrays.toString(fileData2);
+//        System.out.println(file2Str);
+
+
+
+
+        LinkedList<byte[]> queue = new LinkedList<>();
+
+        byte[] fileData = new byte[1024];
+        InputStream mp3file = new FileInputStream(new File("/Users/moonychen/Downloads/20170525093951.mp3"));
+//            mp3file.
+        DataInputStream dis = new DataInputStream(mp3file);
+        int sizeRead = dis.read(fileData);
+        while (sizeRead > 0) {
+
+            queue.offer(Arrays.copyOf(fileData, sizeRead));
+            sizeRead = dis.read(fileData);
+        }
+        dis.close();
+
+
+        ByteArrayQueueDataSource subject = new ByteArrayQueueDataSource(queue);
+        int acc = 0;
+        int total = 37581;
+        byte[] result = new byte[total];
+        while (acc < total) {
+            int r = ThreadLocalRandom.current().nextInt(0, 512 + 1);
+            if (total - acc < r) r = total - acc;
+            subject.read(result, acc, r);
+
+
+            acc += r;
+            String v1 = Arrays.toString(Arrays.copyOf(result, acc));
+            String v2 = Arrays.toString(Arrays.copyOf(fileData2, acc));
+            if (!v1.equals(v2)) {
+                throw new Exception();
+            }
+        }
+
+        String file3Str = Arrays.toString(result);
+        System.out.println(file3Str);
+
+        if (file3Str.equals(file2Str)) {
+                System.out.println("hoooray");
+            }
     }
 }
