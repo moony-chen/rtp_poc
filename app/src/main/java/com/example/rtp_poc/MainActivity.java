@@ -92,8 +92,8 @@ public class MainActivity extends AppCompatActivity {
 
         this.audioSource = new AudioSource(this);
         this.audioStream$ = audioSource.getAudioSource();
-//        this.audioCommand = new AudioCommand(this, this.audioStream$);
-//        this.commandStream$ = this.audioCommand.aWakeStream;
+        this.audioCommand = new AudioCommand(this, this.audioStream$);
+        this.commandStream$ = this.audioCommand.aWakeStream;
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -106,9 +106,11 @@ public class MainActivity extends AppCompatActivity {
                 return;
         } else {
             audioSource.startRecording();
-//            audioCommand.startRecognition();
+            audioCommand.startRecognition();
         }
 
+
+        /*
 
         try {
             LinkedList<byte[]> queue = new LinkedList<>();
@@ -151,10 +153,6 @@ public class MainActivity extends AppCompatActivity {
             System.out.println(file2Str);
 
 
-//            if (file1Str.equals(file2Str)) {
-//                System.out.println("hoooray");
-//            }
-
 
             DefaultRenderersFactory renderer = new DefaultRenderersFactory(this);
             renderer.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
@@ -180,6 +178,7 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
+        */
 
         /*  read fully from mp3 file
 
@@ -264,94 +263,95 @@ public class MainActivity extends AppCompatActivity {
 
 */
 
-//
-//        Observable<Integer> volume$ = this.audioStream$.subscribeOn(Schedulers.computation())
-//                .map(new Function<byte[], Integer>() {
-//                    @Override
-//                    public Integer apply(byte[] bytes) throws Exception {
-//                        return calculateVolume(bytes, 16);
-//                    }
-//                });
-//        Observable<Boolean> talking$ = volume$
-//                .map(new Function<Integer, Integer>() {
-//                    @Override
-//                    public Integer apply(Integer integer) throws Exception {
-//                        return integer > 0 ? 1 : 0;
-//                    }
-//                })
-//                .scan(1, new BiFunction<Integer, Integer, Integer>() {
-//                    @Override
-//                    public Integer apply(Integer acc, Integer value) throws Exception {
-//                        if (value == 1) return 0;
-//                        else return acc + 1;
-//                    }
-//                })
-//                .scan(false, new BiFunction<Boolean, Integer, Boolean>() {
-//                    @Override
-//                    public Boolean apply(Boolean aBoolean, Integer integer) throws Exception {
-//                        if (integer == 0) return true;
-//                        else return  (aBoolean && integer < 32);
-//                        // 32: threshold, if lasts about 2 seconds of no talk, consider user no longer speaks
-//                    }
-//                });
-//        Observable<String> awake$ = this.commandStream$
-//                .observeOn(Schedulers.io())
-//
-////                .doOnNext(n -> Log.d(TAG, "Command " + n))
-//                .filter(comm -> comm.equals("go"))
-//                .switchMap(c -> Observable.timer(4, TimeUnit.SECONDS).map(new Function<Long, String>() {
-//                    @Override
-//                    public String apply(Long aLong) throws Exception {
-//                        return "";
-//                    }
-//                }).startWith(c)
-//                )
-//                .startWith("");
 
-//        Observable<byte[]> conversation$ = Observable.combineLatest(this.audioStream$, awake$, talking$, new Function3<byte[], String, Boolean, byte[]>() {
-//            @Override
-//            public byte[] apply(byte[] bytes, String s, Boolean talking) throws Exception {
-//                if (s.equals("go") && talking) return bytes;
-//                return new byte[0];
-//            }
-//        }).filter(b-> b.length > 0);
+        Observable<Integer> volume$ = this.audioStream$.subscribeOn(Schedulers.computation())
+                .map(new Function<byte[], Integer>() {
+                    @Override
+                    public Integer apply(byte[] bytes) throws Exception {
+                        return calculateVolume(bytes, 16);
+                    }
+                });
+        Observable<Boolean> talking$ = volume$
+                .map(new Function<Integer, Integer>() {
+                    @Override
+                    public Integer apply(Integer integer) throws Exception {
+                        return integer > 0 ? 1 : 0;
+                    }
+                })
+                .scan(1, new BiFunction<Integer, Integer, Integer>() {
+                    @Override
+                    public Integer apply(Integer acc, Integer value) throws Exception {
+                        if (value == 1) return 0;
+                        else return acc + 1;
+                    }
+                })
+                .scan(false, new BiFunction<Boolean, Integer, Boolean>() {
+                    @Override
+                    public Boolean apply(Boolean aBoolean, Integer integer) throws Exception {
+                        if (integer == 0) return true;
+                        else return  (aBoolean && integer < 32);
+                        // 32: threshold, if lasts about 2 seconds of no talk, consider user no longer speaks
+                    }
+                });
+        Observable<String> awake$ = this.commandStream$
+                .observeOn(Schedulers.io())
+
+//                .doOnNext(n -> Log.d(TAG, "Command " + n))
+                .filter(comm -> comm.equals("go"))
+                .switchMap(c -> Observable.timer(4, TimeUnit.SECONDS).map(new Function<Long, String>() {
+                    @Override
+                    public String apply(Long aLong) throws Exception {
+                        return "";
+                    }
+                }).startWith(c)
+                )
+                .startWith("");
+
+        Observable<byte[]> conversation$ = Observable.combineLatest(this.audioStream$, awake$, talking$, new Function3<byte[], String, Boolean, byte[]>() {
+            @Override
+            public byte[] apply(byte[] bytes, String s, Boolean talking) throws Exception {
+//                s.equals("go") &&
+                if (talking) return bytes;
+                return new byte[0];
+            }
+        }).filter(b-> b.length > 0);
 
 
-//        final TextView volumeView = findViewById(R.id.volumeView);
-//        cd.add(
-//                volume$
-//                .subscribeOn(AndroidSchedulers.mainThread())
-//                .subscribe(new Consumer<Integer>() {
-//                    @Override
-//                    public void accept(Integer integer) throws Exception {
-//
-//                        volumeView.setText(String.format(Locale.US, "Volume: %d", integer));
-//                    }
-//                })
-//        );
-//
-//        final TextView talkingView = findViewById(R.id.talkingView);
-//        cd.add(
-//                talking$
-//                .subscribeOn(AndroidSchedulers.mainThread())
-//                .subscribe(new Consumer<Boolean>() {
-//                    @Override
-//                    public void accept(Boolean talking) throws Exception {
-//                        talkingView.setText(String.format(Locale.US, "Talking: %s", talking? "Yes" : "No"));
-//                    }
-//                })
-//        );
+        final TextView volumeView = findViewById(R.id.volumeView);
+        cd.add(
+                volume$
+                .subscribeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<Integer>() {
+                    @Override
+                    public void accept(Integer integer) throws Exception {
 
-//        final TextView awakeView = findViewById(R.id.awakeView);
-//        cd.add(
-//                awake$.observeOn(AndroidSchedulers.mainThread())
-//                .subscribe(new Consumer<String>() {
-//                    @Override
-//                    public void accept(String awake) throws Exception {
-//                        awakeView.setText(String.format(Locale.US, "Awake: %s", awake.equals("go")? "Yes" : "No, say 'go' to wake me up"));
-//                    }
-//                })
-//        );
+                        volumeView.setText(String.format(Locale.US, "Volume: %d", integer));
+                    }
+                })
+        );
+
+        final TextView talkingView = findViewById(R.id.talkingView);
+        cd.add(
+                talking$
+                .subscribeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<Boolean>() {
+                    @Override
+                    public void accept(Boolean talking) throws Exception {
+                        talkingView.setText(String.format(Locale.US, "Talking: %s", talking? "Yes" : "No"));
+                    }
+                })
+        );
+
+        final TextView awakeView = findViewById(R.id.awakeView);
+        cd.add(
+                awake$.observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<String>() {
+                    @Override
+                    public void accept(String awake) throws Exception {
+                        awakeView.setText(String.format(Locale.US, "Awake: %s", awake.equals("go")? "Yes" : "No, say 'go' to wake me up"));
+                    }
+                })
+        );
 
 
         findViewById(R.id.button1).setOnClickListener(new View.OnClickListener() {
@@ -364,7 +364,7 @@ public class MainActivity extends AppCompatActivity {
                 AudioSender sender = AudioSender.getInstance(initRtc(receiver));
 
                 cd.add(
-                audioStream$.subscribeOn(Schedulers.io())
+                        conversation$.subscribeOn(Schedulers.io())
                         .subscribe(new Consumer<byte[]>() {
                             @Override
                             public void accept(byte[] bytes) throws Exception {
@@ -381,7 +381,11 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }, "Sender").start();
 
-                new Thread(new PlaySound(receiver.receive()), "Player").start();
+
+                MediaAudioPlayer player = new MediaAudioPlayer(MainActivity.this);
+                player.play(receiver.receive());
+
+//                new PlaySound(), "Player")
 
 //                initRtc(conversation$);
             }

@@ -87,7 +87,7 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
             }
         }
 
-        bytesRemaining = cache.length + (data.peek() != null ? data.peek().length : 0);
+//        bytesRemaining = cache.length + (data.peek() != null ? data.peek().length : 0);
 
 
         readPosition += copied;

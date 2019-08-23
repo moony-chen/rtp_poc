@@ -36,7 +36,7 @@ public class AudioReceiver implements RtpSessionDataListener {
     }
 
     public AudioReceiver (Context context) {
-        String filename = "myfile.wav";
+        String filename = "myfile.mp3";
         this.context = context;
 
 
@@ -57,7 +57,7 @@ public class AudioReceiver implements RtpSessionDataListener {
     public void dataPacketReceived(RtpSession session, RtpParticipant participant, DataPacket packet) {
         Log.d(TAG,  packet.toString());
         byte[] data = packet.getDataAsArray();
-        stream.offer(data);
+        if (packet.getPayloadType() == 100 ) stream.offer(data);
 
         try {
             outputStream.write(data);

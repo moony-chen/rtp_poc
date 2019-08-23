@@ -24,9 +24,9 @@
         android:layout_marginTop="20dp"
         android:ems="10"
         android:hint="IP Address"
-        android:text="47.107.243.166"
+        android:text="192.168.199.191"
         android:inputType="phone" />
-
+    <!--android:text="47.107.243.166"-->
     <EditText
         android:id="@+id/editText1"
         android:layout_width="match_parent"
