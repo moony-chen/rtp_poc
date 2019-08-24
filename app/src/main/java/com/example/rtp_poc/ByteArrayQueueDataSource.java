@@ -72,9 +72,9 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
             copied += cache.length;
             cache = new byte[0];
 
-            byte[] peek = data.peek();
-            while (peek != null && copied < readLength) {
+            while (copied < readLength) {
                 byte[] poll = data.poll();
+                if (poll == null) continue;
                 if (poll.length + copied <= readLength) {
                     System.arraycopy(poll, 0, buffer, offset + copied, poll.length);
                     copied += poll.length;
