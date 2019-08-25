@@ -3,13 +3,17 @@ package com.example.rtp_poc;
 import android.content.Context;
 import android.net.Uri;
 
+import com.google.android.exoplayer2.C;
+import com.google.android.exoplayer2.DefaultLoadControl;
 import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.ExoPlayerFactory;
+import com.google.android.exoplayer2.LoadControl;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.upstream.DataSource;
+import com.google.android.exoplayer2.upstream.DefaultAllocator;
 
 import java.util.Queue;
 
@@ -22,7 +26,16 @@ public class MediaAudioPlayer implements IAudioPlayer {
         DefaultRenderersFactory renderer = new DefaultRenderersFactory(context);
         renderer.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
 
-        player = ExoPlayerFactory.newSimpleInstance(context, renderer, new DefaultTrackSelector());
+        LoadControl lc = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                        500, //DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                        1000, // DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                        0, // DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        0//DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+                ).createDefaultLoadControl();
+
+
+        player = ExoPlayerFactory.newSimpleInstance(context, renderer, new DefaultTrackSelector(), lc);
 
     }
 

@@ -15,6 +15,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.ThreadLocalRandom;
@@ -89,8 +90,15 @@ public class ByteArrayQueueDataSource extends BaseDataSource {
 
 //        bytesRemaining = cache.length + (data.peek() != null ? data.peek().length : 0);
 
+        if (cache.length == 0 && data.size() == 0) {
+            System.out.println(new Date() + "Song fully loaded");
+        }
+
 
         readPosition += copied;
+
+        System.out.println("transferred into buffer: "+ readPosition);
+
         bytesTransferred(copied);
         return copied;
     }

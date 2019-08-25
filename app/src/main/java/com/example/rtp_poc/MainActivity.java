@@ -4,6 +4,9 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.net.wifi.WifiConfiguration;
+import android.net.wifi.WifiEnterpriseConfig;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.EditText;
@@ -40,6 +43,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.Locale;
 import java.util.Queue;
@@ -109,8 +113,24 @@ public class MainActivity extends AppCompatActivity {
             audioCommand.startRecognition();
         }
 
+        // https://stackoverflow.com/questions/8818290/how-do-i-connect-to-a-specific-wi-fi-network-in-android-programmatically
 
-        /*
+//        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+//        WifiConfiguration config = new WifiConfiguration();
+//        config.SSID = "\"Moony's Air\"";
+//        config.preSharedKey = "\"pass_worD\"";
+//
+//        int networkId = wifiManager.addNetwork(config);
+//
+//        if (networkId != -1) {
+//            wifiManager.disconnect();
+//            wifiManager.enableNetwork(networkId, true);
+//        }
+
+
+
+
+
 
         try {
             LinkedList<byte[]> queue = new LinkedList<>();
@@ -143,8 +163,8 @@ public class MainActivity extends AppCompatActivity {
 //            String file1Str = Arrays.toString(fileData1);
 //            System.out.println(file1Str);
 
-            byte[] fileData2 = new byte[37581];
-            InputStream mp3file2 = getAssets().open("20170525093951.mp3");
+            byte[] fileData2 = new byte[4085919];
+            InputStream mp3file2 = getAssets().open("KazeNoTorimichi.mp3");
 //            mp3file.
             DataInputStream dis2 = new DataInputStream(mp3file2);
             dis2.readFully(fileData2);
@@ -172,13 +192,14 @@ public class MainActivity extends AppCompatActivity {
 
             player.prepare(mediaSource);
             player.setPlayWhenReady(true);
+            System.out.println(new Date() + "Song start loading");
 
         }
         catch(Exception e) {
             e.printStackTrace();
         }
 
-        */
+
 
         /*  read fully from mp3 file
 
@@ -384,10 +405,8 @@ public class MainActivity extends AppCompatActivity {
 
                 MediaAudioPlayer player = new MediaAudioPlayer(MainActivity.this);
                 player.play(receiver.receive());
+                System.out.println(new Date() + "Song start loading");
 
-//                new PlaySound(), "Player")
-
-//                initRtc(conversation$);
             }
         });
 
